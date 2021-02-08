@@ -19,11 +19,13 @@ _default_no_sea_ice_fraction = False
 _default_f_max = 1.0
 _default_tau = 7
 _default_spatial_lambda = 3.0
-_default_sst_cci_analysis_l4_path = '/neodc/esacci/sst/data/CDR_v2/Analysis/L4/v2.1/'
-_default_c3s_sst_analysis_l4_path = '/neodc/c3s_sst/data/ICDR_v2/Analysis/L4/v2.0/'
-_default_sst_cci_climatology_path = '/neodc/esacci/sst/data/CDR_v2/Climatology/L4/v2.1/'
-_default_out_path = '/Users/charles/Data/regrid_test/'
+_default_sst_cci_analysis_l4_path = '/neodc/esacci/sst/data/CDR_v2/Analysis/L4/v2.1'
+_default_c3s_sst_analysis_l4_path = '/neodc/c3s_sst/data/ICDR_v2/Analysis/L4/v2.0'
+_default_sst_cci_climatology_path = '/neodc/esacci/sst/data/CDR_v2/Climatology/L4/v2.1'
+_default_out_path = '/Users/charles/Data/regrid_test'
 _default_zip_name = ''
+
+_c3s_start_year = 2017
 
 
 class SSTRegridder(object):
@@ -615,7 +617,7 @@ class SSTRegridder(object):
                 filename = (os.path.join(self._sst_cci_climatology_path, 'D' + str(day_of_year).zfill(3) +
                                          '-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc'))
         else:
-            if d.year > 2016:
+            if d.year >= _c3s_start_year:
                 filename = os.path.join(self._c3s_sst_analysis_l4_path,
                                         d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'), d.strftime('%Y%m%d') +
                                         '120000-C3S-L4_GHRSST-SSTdepth-OSTIA-GLOB_ICDR2.0-v02.0-fv01.0.nc')
@@ -790,9 +792,9 @@ class SSTRegridder(object):
                 # Select the sea ice fraction and create longitude and latitude bounds if necessary
                 sif = fl.select_by_property(standard_name='sea_ice_area_fraction')[0]
 
-                # OR the sea ice fraction mask with the SST mask.  In years >= 2017, a few cells in the SST field are
-                # masked where equivalent cells in other fields are not.  
-                if self._year >= 2017:
+                # OR the sea ice fraction mask with the SST mask.  In years >= _c3s_start_year, a few cells in the SST
+                # field are masked where equivalent cells in other fields are not.
+                if self._year >= _c3s_start_year:
                     np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sif.array), sif.varray, copy=False)
 
                 SSTRegridder._create_lonlat_bounds(sif)
@@ -800,9 +802,9 @@ class SSTRegridder(object):
                 # Select the SST uncertainty and create longitude and latitude bounds if necessary
                 sst_uncert = fl.select_by_property(standard_name='sea_water_temperature standard_error')[0]
 
-                # OR the SST uncertainty mask with the SST mask.  In years >= 2017, a few cells in the SST field are
-                # masked where equivalent cells in other fields are not
-                if self._year >= 2017:
+                # OR the SST uncertainty mask with the SST mask.  In years >= _c3s_start_year, a few cells in the SST
+                # field are masked where equivalent cells in other fields are not
+                if self._year >= _c3s_start_year:
                     np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sst_uncert.array),
                                        sst_uncert.varray, copy=False)
 
@@ -864,9 +866,9 @@ class SSTRegridder(object):
                         sst_climatology += hl.select_by_property(standard_name='sea_water_temperature')[0]
                         sst_climatology /= 2
 
-                    # OR the climatology mask with the SST mask.  In years >= 2017, a few cells in the SST field are
+                    # OR the climatology mask with the SST mask.  In years >= _c3s_start_year, a few cells in the SST field are
                     # masked where equivalent cells in other fields are not
-                    if self._year >= 2017:
+                    if self._year >= _c3s_start_year:
                         np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sst_climatology.array),
                                            sst_climatology.varray, copy=False)
 
