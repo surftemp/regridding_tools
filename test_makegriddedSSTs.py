@@ -95,8 +95,11 @@ class MakeGriddedSSTsTestCase(unittest.TestCase):
             sst_regridder._calculate_k_xy()
 
             # Calculate the expected value of k_xy at each point
-            expected_k_xy = max(lon_resolution / sst_regridder._spatial_lambda, 1.0) * \
-                            max(lat_resolution / sst_regridder._spatial_lambda, 1.0)
+            cos_theta = np.cos(np.radians(sst_regridder._lat.array)).reshape(-1, 1)
+            k_x_denominator = sst_regridder._spatial_lambda / cos_theta
+            k_x = np.maximum(lon_resolution / k_x_denominator, 1.0)
+            k_y = np.maximum(lat_resolution / sst_regridder._spatial_lambda, 1.0)
+            expected_k_xy = k_x * k_y
 
             # Check that the k_xy data is as expected
             self.assertTrue((sst_regridder._k_xy == expected_k_xy).all(),
@@ -115,7 +118,7 @@ class MakeGriddedSSTsTestCase(unittest.TestCase):
         f = cf.read('test_data_2_2.nc')[0]
 
         # The spatial scale within which the observations are assumed to be fully correlated in degrees
-        sst_regridder._spatial_lambda = 2.0
+        sst_regridder._spatial_lambda = 3.0
 
         # The integer steps with which to resample the longitude and latitude
         sst_regridder._lon_step = 2
@@ -241,7 +244,7 @@ class MakeGriddedSSTsTestCase(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    # Create test data files with the spefied longitude and latitude steps
+    # Create test data files with the specified longitude and latitude steps
     create_test_data(lon_step=2, lat_step=2)
     create_test_data(lon_step=3, lat_step=3)
 
