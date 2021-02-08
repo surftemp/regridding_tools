@@ -28,8 +28,10 @@ _default_zip_name = ''
 
 class SSTRegridder(object):
     """
-    SST regridder class. Should be instantiated first, optionally with paths to the input data and then a call made
-    to the resulting object to perform the regridding at a particular resolution with other options available.
+    Class for regridding L4 SSTs.
+
+    Should be instantiated first, optionally with paths to the input data and then a call made to the resulting object
+    to perform the regridding at a particular resolution with other options available.
     """
     def __init__(self, sst_cci_analysis_l4_path=regridding_constants._default_sst_cci_analysis_l4_path,
                  c3s_sst_analysis_l4_path=regridding_constants._default_c3s_sst_analysis_l4_path,
@@ -68,7 +70,7 @@ class SSTRegridder(object):
                  no_sea_ice_fraction=_default_no_sea_ice_fraction, f_max=_default_f_max, tau=_default_tau,
                  spatial_lambda=_default_spatial_lambda, out_path=_default_out_path, zip_name=_default_zip_name):
         """
-        Regrid the SSTs to a target resolution.
+        Regrid the L4 SSTs to a target resolution.
 
         :param lon_resolution:
             The target longitude resolution. This must be a multiple of 0.05 degrees and a factor of 360 degrees. It
@@ -973,7 +975,7 @@ class SSTRegridder(object):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Regrid SST data for a particular year.')
+    parser = argparse.ArgumentParser(description='Regrid L4 SST data for a particular year.')
     parser.add_argument('lon_resolution', type=float, help='The target longitude resolution. This must be a multiple ' +
                                                            'of 0.05 degrees and a factor of 360 degrees. It must ' +
                                                            'also not be greater than 5 degrees.')
