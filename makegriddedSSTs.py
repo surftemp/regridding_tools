@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 
 import argparse
+import os
+import zipfile
 from calendar import monthrange, isleap
 from datetime import date, datetime, timedelta
-import os
+from uuid import uuid4
+
 import cf
 import numpy as np
-from uuid import uuid4
-import zipfile
 
-_default_year = 1982
+import regridding_constants
+
+_default_year = regridding_constants._cci_start_year
 _default_start_month = 1
 _default_start_day = 1
 _default_end_month = 12
@@ -19,13 +22,8 @@ _default_no_sea_ice_fraction = False
 _default_f_max = 1.0
 _default_tau = 7
 _default_spatial_lambda = 3.0
-_default_sst_cci_analysis_l4_path = '/neodc/esacci/sst/data/CDR_v2/Analysis/L4/v2.1'
-_default_c3s_sst_analysis_l4_path = '/neodc/c3s_sst/data/ICDR_v2/Analysis/L4/v2.0'
-_default_sst_cci_climatology_path = '/neodc/esacci/sst/data/CDR_v2/Climatology/L4/v2.1'
 _default_out_path = '/Users/charles/Data/regrid_test'
 _default_zip_name = ''
-
-_c3s_start_year = 2017
 
 
 class SSTRegridder(object):
@@ -33,9 +31,9 @@ class SSTRegridder(object):
     SST regridder class. Should be instantiated first, optionally with paths to the input data and then a call made
     to the resulting object to perform the regridding at a particular resolution with other options available.
     """
-    def __init__(self, sst_cci_analysis_l4_path=_default_sst_cci_analysis_l4_path,
-                 c3s_sst_analysis_l4_path=_default_c3s_sst_analysis_l4_path,
-                 sst_cci_climatology_path=_default_sst_cci_climatology_path,):
+    def __init__(self, sst_cci_analysis_l4_path=regridding_constants._default_sst_cci_analysis_l4_path,
+                 c3s_sst_analysis_l4_path=regridding_constants._default_c3s_sst_analysis_l4_path,
+                 sst_cci_climatology_path=regridding_constants._default_sst_cci_climatology_path, ):
         """
         Initiate an SST regridder optionally specfying the input file paths.
 
@@ -100,20 +98,22 @@ class SSTRegridder(object):
             The final day of the month of the data to be regridded.
 
         :param anomalies:
-            Whether to output anomalies instead of absolute SSTs. False by default.
+            Whether to output anomalies instead of absolute SSTs. Default set by _default_anomalies.
 
         :param no_sea_ice_fraction:
-            Whether to output the sea ice fraction or not. False by default.
+            Whether to output the sea ice fraction or not. Default set by _default_no_sea_ice_fraction.
 
         :param f_max:
-            The fraction of sea ice above which a cell is ignored in calculating the regridded SST. Default is 1.0. When
-            calculating anomalies, the climatology is always calculated with an f_max of 1.0 regardless of this value.
+            The fraction of sea ice above which a cell is ignored in calculating the regridded SST. Default set by
+            _default_f_max. When calculating anomalies, the climatology is always calculated with an f_max of 1.0
+            regardless of this value.
 
         :param tau:
-            Timescale within which errors are assumed to be fully correlated in days. Default is 3 days.
+            Timescale within which errors are assumed to be fully correlated in days. Default set by _default_tau.
 
         :param spatial_lambda:
-            Spatial scale within which errors are assumed to be fully correlated in degrees. Default is 1.0 degrees.
+            Spatial scale within which errors are assumed to be fully correlated in degrees. Default set by
+            _default_spatial_lambda.
 
         :param out_path:
             The path in which to write the output file of regridded data.
@@ -608,16 +608,18 @@ class SSTRegridder(object):
         """
         if climatology:
             if d.month == 2 and d.day == 29:
+                # If the day is the 29th of February the files for D59 and D60 will be averaged.
                 filename = (os.path.join(self._sst_cci_climatology_path,
                                          'D059-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc'),
                             os.path.join(self._sst_cci_climatology_path,
                                          'D060-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc'))
             else:
+                # Get day of year as if the year was a non-leap year.
                 day_of_year = date(1982, d.month, d.day).timetuple().tm_yday
                 filename = (os.path.join(self._sst_cci_climatology_path, 'D' + str(day_of_year).zfill(3) +
                                          '-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc'))
         else:
-            if d.year >= _c3s_start_year:
+            if d.year >= regridding_constants._c3s_start_year:
                 filename = os.path.join(self._c3s_sst_analysis_l4_path,
                                         d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'), d.strftime('%Y%m%d') +
                                         '120000-C3S-L4_GHRSST-SSTdepth-OSTIA-GLOB_ICDR2.0-v02.0-fv01.0.nc')
@@ -794,7 +796,7 @@ class SSTRegridder(object):
 
                 # OR the sea ice fraction mask with the SST mask.  In years >= _c3s_start_year, a few cells in the SST
                 # field are masked where equivalent cells in other fields are not.
-                if self._year >= _c3s_start_year:
+                if self._year >= regridding_constants._c3s_start_year:
                     np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sif.array), sif.varray, copy=False)
 
                 SSTRegridder._create_lonlat_bounds(sif)
@@ -804,7 +806,7 @@ class SSTRegridder(object):
 
                 # OR the SST uncertainty mask with the SST mask.  In years >= _c3s_start_year, a few cells in the SST
                 # field are masked where equivalent cells in other fields are not
-                if self._year >= _c3s_start_year:
+                if self._year >= regridding_constants._c3s_start_year:
                     np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sst_uncert.array),
                                        sst_uncert.varray, copy=False)
 
@@ -866,9 +868,9 @@ class SSTRegridder(object):
                         sst_climatology += hl.select_by_property(standard_name='sea_water_temperature')[0]
                         sst_climatology /= 2
 
-                    # OR the climatology mask with the SST mask.  In years >= _c3s_start_year, a few cells in the SST field are
-                    # masked where equivalent cells in other fields are not
-                    if self._year >= _c3s_start_year:
+                    # OR the climatology mask with the SST mask.  In years >= _c3s_start_year, a few cells in the SST
+                    # field are masked where equivalent cells in other fields are not
+                    if self._year >= regridding_constants._c3s_start_year:
                         np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sst_climatology.array),
                                            sst_climatology.varray, copy=False)
 
@@ -982,34 +984,37 @@ if __name__ == '__main__':
                                                 "'10-day' for dekads, '5-day' for pentads or an integer for regular " +
                                                 " N day regridding aligned with the start of the year.")
     parser.add_argument('--year', type=int, default=_default_year,
-                        help='The year of the data to be regridded. Default is 1982.')
+                        help='The year of the data to be regridded. Default is ' + str(_default_year) + '.')
     parser.add_argument('--start_month', type=int, default=_default_start_month,
-                        help='The first month of the data to be regridded. Default is 1.')
+                        help='The first month of the data to be regridded. Default is ' + str(_default_start_month)
+                             + '.')
     parser.add_argument('--start_day', type=int, default=_default_start_day,
-                        help='The first day of the month of the data to be regridded. Default is 1.')
+                        help='The first day of the month of the data to be regridded. Default is '
+                             + str(_default_start_day) + '.')
     parser.add_argument('--end_month', type=int, default=_default_end_month,
-                        help='The final month of the data to be regridded. Default is 12.')
+                        help='The final month of the data to be regridded. Default is ' + str(_default_end_month) + '.')
     parser.add_argument('--end_day', type=int, default=_default_end_day,
-                        help='The final day of the month of the data to be regridded. Default is 31.')
-    parser.add_argument('--anomalies', action='store_true', default=_default_anomalies,
+                        help='The final day of the month of the data to be regridded. Default is '
+                             + str(_default_end_day) + '.')
+    parser.add_argument('--anomalies', action='store_true', default=False,
                         help='Output anomalies instead of absolute SSTs.')
-    parser.add_argument('--no_sea_ice_fraction', action='store_true', default=_default_no_sea_ice_fraction,
+    parser.add_argument('--no_sea_ice_fraction', action='store_true', default=False,
                         help='Do not output the sea ice fraction.')
     parser.add_argument('--f_max', type=float, default=_default_f_max,
-                        help='The fraction of sea ice above which a cell is ignored in calculating the regridded ' +
-                             'SST. Default is 1.0. When calculating anomalies, the climatology is always calculated ' +
-                             'with an f_max of 1.0 regardless of this value.')
+                        help='The fraction of sea ice above which a cell is ignored in calculating the regridded SST '
+                             + 'SST. Default is ' + str(_default_f_max) + '. When calculating anomalies, the '
+                             + 'climatology is always calculated with an f_max of 1.0 regardless of this value.')
     parser.add_argument('--tau', type=int, default=_default_tau,
-                        help='Timescale within which errors are assumed to be fully correlated in days. ' +
-                             'Default is 3 days.')
+                        help='Timescale within which errors are assumed to be fully correlated in days. '
+                             + 'Default is ' + str(_default_tau) + ' days.')
     parser.add_argument('--spatial_lambda', type=float, default=_default_spatial_lambda,
-                        help='Spatial scale within which errors are assumed to be fully correlated in degrees. ' +
-                             'Default is 1.0 degrees.')
-    parser.add_argument('--sst_cci_analysis_l4_path', default=_default_sst_cci_analysis_l4_path,
+                        help='Spatial scale within which errors are assumed to be fully correlated in degrees. '
+                             + 'Default is ' + str(_default_spatial_lambda) + ' degrees.')
+    parser.add_argument('--sst_cci_analysis_l4_path', default=regridding_constants._default_sst_cci_analysis_l4_path,
                         help='Path to the SST CCI Analysis Level 4 input data.')
-    parser.add_argument('--c3s_sst_analysis_l4_path', default=_default_c3s_sst_analysis_l4_path,
+    parser.add_argument('--c3s_sst_analysis_l4_path', default=regridding_constants._default_c3s_sst_analysis_l4_path,
                         help='Path to the C3S SST Analysis Level 4 input data.')
-    parser.add_argument('--sst_cci_climatology_path', default=_default_sst_cci_climatology_path,
+    parser.add_argument('--sst_cci_climatology_path', default=regridding_constants._default_sst_cci_climatology_path,
                         help='Path to the SST CCI Climatology input data.')
     parser.add_argument('--out_path', default=_default_out_path,
                         help='The path in which to write the output file of regridded data.')
