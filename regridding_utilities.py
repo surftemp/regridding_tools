@@ -1,5 +1,5 @@
 """
-Common functionality between the regridding tool.
+Common functionality between the regridding tools.
 """
 
 import cf
@@ -55,88 +55,6 @@ def create_lonlat_bounds(f):
         lat_bounds.nc_set_variable('lat_bnds')
         lat_bounds.nc_set_dimension('bnds')
         lat.set_bounds(lat_bounds)
-
-
-def resample_lonlat(regridder, f):
-    """
-    Create resampled longitude and latitude cf dimension coordinates.
-
-    :param regridder:
-        regridder object with lon_step and lat_step.
-    :param f:
-        cf Field object with longitudes and latitudes.
-    """
-    # Resample the latitude and longitude arrays and their bounds
-    lon = f.dimension_coordinate('X')
-    lat = f.dimension_coordinate('Y')
-
-    lon_bounds_array = lon.bounds.array
-    lat_bounds_array = lat.bounds.array
-
-    resampled_lon_bounds_array = np.column_stack((lon_bounds_array[0::regridder.lon_step, 0],
-                                                  lon_bounds_array[regridder.lon_step - 1::regridder.lon_step, 1]))
-    resampled_lat_bounds_array = np.column_stack((lat_bounds_array[0::regridder.lat_step, 0],
-                                                  lat_bounds_array[regridder.lat_step - 1::regridder.lat_step, 1]))
-
-    # If the step is even use the value of the bounds of the old cell in the centre of the new cell as the new
-    # coordinate values, otherwise use the coordinate values in the centre of the old cell.
-    if regridder.lon_step % 2 == 0:
-        resampled_lon_array = lon_bounds_array[regridder.lon_step // 2::regridder.lon_step, 0]
-    else:
-        resampled_lon_array = lon.array[regridder.lon_step // 2::regridder.lon_step]
-    if regridder.lat_step % 2 == 0:
-        resampled_lat_array = lat_bounds_array[regridder.lat_step // 2::regridder.lat_step, 0]
-    else:
-        resampled_lat_array = lat.array[regridder.lat_step // 2::regridder.lat_step]
-
-    # Create new cf dimension coordinates
-    lon_units = lon.units
-    lat_units = lat.units
-    lon_dtype = lon.dtype
-    lat_dtype = lat.dtype
-
-    resampled_lon = lon.copy(data=False)
-    resampled_lat = lat.copy(data=False)
-
-    resampled_lon_bounds = lon.bounds.copy(data=False)
-    resampled_lat_bounds = lat.bounds.copy(data=False)
-
-    resampled_lon_bounds.set_data(cf.Data(resampled_lon_bounds_array, units=lon_units, dtype=lon_dtype))
-    resampled_lat_bounds.set_data(cf.Data(resampled_lat_bounds_array, units=lat_units, dtype=lat_dtype))
-
-    resampled_lon.set_data(cf.Data(resampled_lon_array, units=lon_units, dtype=lon_dtype))
-    resampled_lon.set_bounds(resampled_lon_bounds)
-    resampled_lat.set_data(cf.Data(resampled_lat_array, units=lat_units, dtype=lat_dtype))
-    resampled_lat.set_bounds(resampled_lat_bounds)
-
-    regridder.lon = resampled_lon
-    regridder.lat = resampled_lat
-
-
-def spatially_resample_data(regridder, f, weights=False):
-    """
-    Resample a field's data spatially.
-
-    :param regridder:
-        regridder object with information for regridding.
-    :param f:
-        The field whose data is to be resampled.
-
-    :return:
-        The resampled data as a cf.Data object.
-    """
-    if weights:
-        array = (f * regridder.weights).array
-    else:
-        array = f.array
-
-    array = array.reshape((1, regridder.lat.size, regridder.lat_step, regridder.lon.size, regridder.lon_step))
-    array = array.transpose((0, 1, 3, 2, 4))
-    array = array.reshape((1, regridder.lat.size, regridder.lon.size, regridder.lat_step * regridder.lon_step))
-    array = np.sum(array, axis=3)
-
-    data = cf.Data(array, units=f.units, fill_value=f.fill_value(default='netCDF'), dtype=f.dtype)
-    return data
 
 
 def add_data(d1, d2):
@@ -235,3 +153,84 @@ def daterange(start_date, end_date, step=1):
     """
     for n in range(0, int((end_date - start_date).days), step):
         yield start_date + timedelta(n)
+
+
+class Regridder(object):
+    """
+    Base class for regridding high resolution (SST) data to more managable resolutions.
+    """
+    def resample_lonlat(self, f):
+        """
+        Create resampled longitude and latitude cf dimension coordinates.
+
+        :param f:
+            cf Field object with longitudes and latitudes.
+        """
+        # Resample the latitude and longitude arrays and their bounds
+        lon = f.dimension_coordinate('X')
+        lat = f.dimension_coordinate('Y')
+
+        lon_bounds_array = lon.bounds.array
+        lat_bounds_array = lat.bounds.array
+
+        resampled_lon_bounds_array = np.column_stack((lon_bounds_array[0::self.lon_step, 0],
+                                                      lon_bounds_array[self.lon_step - 1::self.lon_step, 1]))
+        resampled_lat_bounds_array = np.column_stack((lat_bounds_array[0::self.lat_step, 0],
+                                                      lat_bounds_array[self.lat_step - 1::self.lat_step, 1]))
+
+        # If the step is even use the value of the bounds of the old cell in the centre of the new cell as the new
+        # coordinate values, otherwise use the coordinate values in the centre of the old cell.
+        if self.lon_step % 2 == 0:
+            resampled_lon_array = lon_bounds_array[self.lon_step // 2::self.lon_step, 0]
+        else:
+            resampled_lon_array = lon.array[self.lon_step // 2::self.lon_step]
+        if self.lat_step % 2 == 0:
+            resampled_lat_array = lat_bounds_array[self.lat_step // 2::self.lat_step, 0]
+        else:
+            resampled_lat_array = lat.array[self.lat_step // 2::self.lat_step]
+
+        # Create new cf dimension coordinates
+        lon_units = lon.units
+        lat_units = lat.units
+        lon_dtype = lon.dtype
+        lat_dtype = lat.dtype
+
+        resampled_lon = lon.copy(data=False)
+        resampled_lat = lat.copy(data=False)
+
+        resampled_lon_bounds = lon.bounds.copy(data=False)
+        resampled_lat_bounds = lat.bounds.copy(data=False)
+
+        resampled_lon_bounds.set_data(cf.Data(resampled_lon_bounds_array, units=lon_units, dtype=lon_dtype))
+        resampled_lat_bounds.set_data(cf.Data(resampled_lat_bounds_array, units=lat_units, dtype=lat_dtype))
+
+        resampled_lon.set_data(cf.Data(resampled_lon_array, units=lon_units, dtype=lon_dtype))
+        resampled_lon.set_bounds(resampled_lon_bounds)
+        resampled_lat.set_data(cf.Data(resampled_lat_array, units=lat_units, dtype=lat_dtype))
+        resampled_lat.set_bounds(resampled_lat_bounds)
+
+        self.lon = resampled_lon
+        self.lat = resampled_lat
+
+    def spatially_resample_data(self, f, weights=False):
+        """
+        Resample a field's data spatially.
+
+        :param f:
+            The field whose data is to be resampled.
+
+        :return:
+            The resampled data as a cf.Data object.
+        """
+        if weights:
+            array = (f * self.weights).array
+        else:
+            array = f.array
+
+        array = array.reshape((1, self.lat.size, self.lat_step, self.lon.size, self.lon_step))
+        array = array.transpose((0, 1, 3, 2, 4))
+        array = array.reshape((1, self.lat.size, self.lon.size, self.lat_step * self.lon_step))
+        array = np.sum(array, axis=3)
+
+        data = cf.Data(array, units=f.units, fill_value=f.fill_value(default='netCDF'), dtype=f.dtype)
+        return data

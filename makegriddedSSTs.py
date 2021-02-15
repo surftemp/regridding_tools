@@ -11,7 +11,7 @@ import cf
 import numpy as np
 
 import regridding_constants
-import regridding_functions
+import regridding_utilities
 
 _default_year = regridding_constants._cci_start_year
 _default_start_month = 1
@@ -27,7 +27,7 @@ _default_out_path = '/Users/charles/Data/regrid_test'
 _default_zip_name = ''
 
 
-class SSTRegridder(object):
+class SSTRegridder(regridding_utilities.Regridder):
     """
     Class for regridding L4 SSTs.
 
@@ -58,10 +58,10 @@ class SSTRegridder(object):
         self.lon_range = 360.0
         self.lat_range = 180.0
 
-        self.allowed_lon_resolutions = regridding_functions.allowed_lonlat_resolutions(self.base_resolution,
+        self.allowed_lon_resolutions = regridding_utilities.allowed_lonlat_resolutions(self.base_resolution,
                                                                                        self.max_resolution,
                                                                                        self.lon_range)
-        self.allowed_lat_resolutions = regridding_functions.allowed_lonlat_resolutions(self.base_resolution,
+        self.allowed_lat_resolutions = regridding_utilities.allowed_lonlat_resolutions(self.base_resolution,
                                                                                        self.max_resolution,
                                                                                        self.lat_range)
 
@@ -167,21 +167,21 @@ class SSTRegridder(object):
         self.zip_name = zip_name
 
         # Set the date created and the uuid
-        self._date_created = datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')
-        self._uuid = str(uuid4())
+        self.date_created = datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')
+        self.uuid = str(uuid4())
 
         # Read in a sea ice fraction field
         fl = cf.read(self.filename_groups[0][0])
         sif = fl.select_by_property(standard_name='sea_ice_area_fraction')[0]
 
         # Create longitude and latitude bounds if necessary
-        regridding_functions.create_lonlat_bounds(sif)
+        regridding_utilities.create_lonlat_bounds(sif)
 
         # Make the weights
         self.weights = sif.weights('area', scale=1.0)
 
         # Resample the longitude and latitude
-        regridding_functions.resample_lonlat(self, sif)
+        self.resample_lonlat(sif)
 
         # Set the timescale and spatial scale within which errors are assumed to be fully correlated in days
         self.tau = tau
@@ -190,8 +190,8 @@ class SSTRegridder(object):
         self.calculate_k_xy()
 
         # Calculate the fraction of ocean in each target cell
-        self.sf_data = regridding_functions.spatially_resample_data(self, sif.where(True, 1.0), weights=True)
-        self.sf_data /= regridding_functions.spatially_resample_data(self, self.weights)
+        self.sf_data = self.spatially_resample_data(sif.where(True, 1.0), weights=True)
+        self.sf_data /= self.spatially_resample_data(self.weights)
         self.sf_data.filled(fill_value=0.0, inplace=True)
 
         # Close the files
@@ -361,9 +361,9 @@ class SSTRegridder(object):
         g.nc_set_global_attribute('f_max', self.f_max)
         g.nc_set_global_attribute('lambda', self.spatial_lambda)
         g.nc_set_global_attribute('tau', np.int32(self.tau))
-        g.set_property('date_created', self._date_created)
-        g.set_property('uuid', self._uuid)
-        g.set_property('tracking_id', self._uuid)
+        g.set_property('date_created', self.date_created)
+        g.set_property('uuid', self.uuid)
+        g.set_property('tracking_id', self.uuid)
 
         # Close the fields
         fl.close()
@@ -488,7 +488,7 @@ class SSTRegridder(object):
             filenames = []
             start_date = date(self.year, self.start_month, self.start_day)
             end_date = date(self.year, self.end_month, self.end_day) + timedelta(1)
-            for d in regridding_functions.daterange(start_date, end_date):
+            for d in regridding_utilities.daterange(start_date, end_date):
                 filename = self.get_filename(d, climatology)
                 filenames.append(filename)
             filename_groups.append(filenames)
@@ -498,7 +498,7 @@ class SSTRegridder(object):
                 days_in_month = monthrange(self.year, month)[1]
                 end_date = date(self.year, month, days_in_month) + timedelta(1)
                 filenames = []
-                for d in regridding_functions.daterange(start_date, end_date):
+                for d in regridding_utilities.daterange(start_date, end_date):
                     filename = self.get_filename(d, climatology)
                     filenames.append(filename)
                 filename_groups.append(filenames)
@@ -508,12 +508,12 @@ class SSTRegridder(object):
             for month in range(self.start_month, self.end_month + 1):
                 days_in_month = monthrange(self.year, month)[1]
                 start_date, end_date = self.get_start_end_dates(month)
-                for outer_d in regridding_functions.daterange(start_date, end_date, step=step):
+                for outer_d in regridding_utilities.daterange(start_date, end_date, step=step):
                     if outer_d.day < break_day:
-                        inner_drange = regridding_functions.daterange(outer_d, outer_d + timedelta(step))
+                        inner_drange = regridding_utilities.daterange(outer_d, outer_d + timedelta(step))
                     else:
-                        inner_drange = regridding_functions.daterange(outer_d, date(self.year, month, days_in_month) +
-                                                              timedelta(1))
+                        inner_drange = regridding_utilities.daterange(outer_d, date(self.year, month, days_in_month) +
+                                                                      timedelta(1))
                     filenames = []
                     for inner_d in inner_drange:
                         filename = self.get_filename(inner_d, climatology)
@@ -528,13 +528,13 @@ class SSTRegridder(object):
             finish = False
             for i in range(0, days_in_year, self.time_resolution):
                 if i + self.time_resolution >= days_in_year:
-                    drange = regridding_functions.daterange(start_date + timedelta(i), end_date)
+                    drange = regridding_utilities.daterange(start_date + timedelta(i), end_date)
                 elif i + 3 * self.time_resolution / 2 > days_in_year:
-                    drange = regridding_functions.daterange(start_date + timedelta(i), end_date)
+                    drange = regridding_utilities.daterange(start_date + timedelta(i), end_date)
                     finish = True
                 else:
-                    drange = regridding_functions.daterange(start_date + timedelta(i),
-                                                    start_date + timedelta(i + self.time_resolution))
+                    drange = regridding_utilities.daterange(start_date + timedelta(i),
+                                                            start_date + timedelta(i + self.time_resolution))
                 filenames = []
                 for d in drange:
                     filename = self.get_filename(d, climatology)
@@ -567,7 +567,7 @@ class SSTRegridder(object):
 
                 # Select the SST and create longitude and latitude bounds if necessary
                 sst = fl.select_by_property(standard_name='sea_water_temperature')[0]
-                regridding_functions.create_lonlat_bounds(sst)
+                regridding_utilities.create_lonlat_bounds(sst)
 
                 # Select the sea ice fraction and create longitude and latitude bounds if necessary
                 sif = fl.select_by_property(standard_name='sea_ice_area_fraction')[0]
@@ -577,7 +577,7 @@ class SSTRegridder(object):
                 if self.year >= regridding_constants._c3s_start_year:
                     np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sif.array), sif.varray, copy=False)
 
-                regridding_functions.create_lonlat_bounds(sif)
+                regridding_utilities.create_lonlat_bounds(sif)
 
                 # Select the SST uncertainty and create longitude and latitude bounds if necessary
                 sst_uncert = fl.select_by_property(standard_name='sea_water_temperature standard_error')[0]
@@ -588,54 +588,50 @@ class SSTRegridder(object):
                     np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sst_uncert.array),
                                        sst_uncert.varray, copy=False)
 
-                regridding_functions.create_lonlat_bounds(sst_uncert)
+                regridding_utilities.create_lonlat_bounds(sst_uncert)
 
                 # Calculate the regridded absolute SST
-                data = regridding_functions.spatially_resample_data(self, sst.where(sif > self.f_max, cf.masked),
-                                                                    weights=True)
+                data = self.spatially_resample_data(sst.where(sif > self.f_max, cf.masked), weights=True)
                 if resampled_sst_data is None:
                     resampled_sst_data = data
                 else:
-                    resampled_sst_data = regridding_functions.add_data(resampled_sst_data, data)
+                    resampled_sst_data = regridding_utilities.add_data(resampled_sst_data, data)
 
                 # Calculate the denominator for averaging
-                data = regridding_functions.spatially_resample_data(self, sif.where(cf.le(self.f_max), 1.0, cf.masked),
-                                                                    weights=True)
+                data = self.spatially_resample_data(sif.where(cf.le(self.f_max), 1.0, cf.masked), weights=True)
                 if sst_denominator is None:
                     sst_denominator = data
                 else:
-                    sst_denominator = regridding_functions.add_data(sst_denominator, data)
+                    sst_denominator = regridding_utilities.add_data(sst_denominator, data)
 
                 # Calculate the regridded SST uncertainty
-                data = regridding_functions.spatially_resample_data(self,
-                                                                    sst_uncert.where(sif > self.f_max, cf.masked) ** 2.0,
-                                                                    weights=True)
+                data = self.spatially_resample_data(sst_uncert.where(sif > self.f_max, cf.masked) ** 2.0, weights=True)
                 if resampled_sst_uncert_data is None:
                     resampled_sst_uncert_data = data
                 else:
-                    resampled_sst_uncert_data = regridding_functions.add_data(resampled_sst_uncert_data, data)
+                    resampled_sst_uncert_data = regridding_utilities.add_data(resampled_sst_uncert_data, data)
 
                 # Calculate the number of observations used in each target cell
-                data = regridding_functions.spatially_resample_data(self, sif.where(cf.le(self.f_max), 1.0, cf.masked))
+                data = self.spatially_resample_data(sif.where(cf.le(self.f_max), 1.0, cf.masked))
                 if n is None:
                     n = data
                 else:
-                    n = regridding_functions.add_data(n, data)
+                    n = regridding_utilities.add_data(n, data)
 
                 if self.sea_ice_fraction:
                     # Calculate the regridded sea ice fraction
-                    data = regridding_functions.spatially_resample_data(self, sif, weights=True)
+                    data = self.spatially_resample_data(sif, weights=True)
                     if resampled_sif_data is None:
                         resampled_sif_data = data
                     else:
-                        resampled_sif_data = regridding_functions.add_data(resampled_sif_data, data)
+                        resampled_sif_data = regridding_utilities.add_data(resampled_sif_data, data)
 
                     # Calculate the denominator for averaging
-                    data = regridding_functions.spatially_resample_data(self, sif.where(True, 1.0), True)
+                    data = self.spatially_resample_data(sif.where(True, 1.0), True)
                     if sif_denominator is None:
                         sif_denominator = data
                     else:
-                        sif_denominator = regridding_functions.add_data(sif_denominator, data)
+                        sif_denominator = regridding_utilities.add_data(sif_denominator, data)
 
                 if self.anomalies:
                     # Read in and regrid the climatology
@@ -655,13 +651,11 @@ class SSTRegridder(object):
                         np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sst_climatology.array),
                                            sst_climatology.varray, copy=False)
 
-                    data = regridding_functions.spatially_resample_data(self,
-                                                                        sst_climatology.where(sif > self.f_max, cf.masked),
-                                                                        weights=True)
+                    data = self.spatially_resample_data(sst_climatology.where(sif > self.f_max, cf.masked), weights=True)
                     if resampled_sst_climatology_data is None:
                         resampled_sst_climatology_data = data
                     else:
-                        resampled_sst_climatology_data = regridding_functions.add_data(resampled_sst_climatology_data, data)
+                        resampled_sst_climatology_data = regridding_utilities.add_data(resampled_sst_climatology_data, data)
                     gl.close()
                     if type(climatology_filename) is not str:
                         hl.close()
@@ -734,10 +728,10 @@ class SSTRegridder(object):
             if self.sea_ice_fraction:
                 fl.append(resampled_sif)
             fl.append(sf)
-            fl.append(regridding_functions.create_time_field(sf, 'calendar_year', 'calendar year', dt.year))
-            fl.append(regridding_functions.create_time_field(sf, 'calendar_month', 'calendar month', dt.month))
-            fl.append(regridding_functions.create_time_field(sf, 'day_of_month', 'day of month', dt.day))
-            fl.append(regridding_functions.create_time_field(sf, 'day_of_year', 'day of year', dt.dayofyr))
+            fl.append(regridding_utilities.create_time_field(sf, 'calendar_year', 'calendar year', dt.year))
+            fl.append(regridding_utilities.create_time_field(sf, 'calendar_month', 'calendar month', dt.month))
+            fl.append(regridding_utilities.create_time_field(sf, 'day_of_month', 'day of month', dt.day))
+            fl.append(regridding_utilities.create_time_field(sf, 'day_of_year', 'day of year', dt.dayofyr))
 
             # Write the data
             output_path = os.path.join(self.out_path, dt.strftime('%Y%m%d') + '_regridded_sst.nc')

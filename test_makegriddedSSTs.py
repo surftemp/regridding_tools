@@ -10,13 +10,13 @@ import os
 from create_test_data import create_test_data
 
 from makegriddedSSTs import SSTRegridder
-import regridding_functions
+import regridding_utilities
 
 class MakeGriddedSSTsTestCase(unittest.TestCase):
     def test_calculate_k_xy(self):
         def check_k_xy():
             # Create resampled longitude and latitude coordinates
-            regridding_functions.resample_lonlat(sst_regridder, f)
+            sst_regridder.resample_lonlat(f)
 
             # Calculate k_xy
             sst_regridder.calculate_k_xy()
