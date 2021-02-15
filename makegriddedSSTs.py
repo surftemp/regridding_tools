@@ -3,7 +3,7 @@
 import argparse
 import os
 import zipfile
-from calendar import monthrange, isleap
+from calendar import monthrange
 from datetime import date, datetime, timedelta
 from uuid import uuid4
 
@@ -13,7 +13,7 @@ import numpy as np
 import regridding_constants
 import regridding_utilities
 
-_default_year = regridding_constants._cci_start_year
+_default_year = regridding_constants.cci_start_year + 1
 _default_start_month = 1
 _default_start_day = 1
 _default_end_month = 12
@@ -34,9 +34,9 @@ class SSTRegridder(regridding_utilities.Regridder):
     Should be instantiated first, optionally with paths to the input data and then a call made to the resulting object
     to perform the regridding at a particular resolution with other options available.
     """
-    def __init__(self, sst_cci_analysis_l4_path=regridding_constants._default_sst_cci_analysis_l4_path,
-                 c3s_sst_analysis_l4_path=regridding_constants._default_c3s_sst_analysis_l4_path,
-                 sst_cci_climatology_path=regridding_constants._default_sst_cci_climatology_path, ):
+    def __init__(self, sst_cci_analysis_l4_path=regridding_constants.default_sst_cci_analysis_l4_path,
+                 c3s_sst_analysis_l4_path=regridding_constants.default_c3s_sst_analysis_l4_path,
+                 sst_cci_climatology_path=regridding_constants.default_sst_cci_climatology_path, ):
         """
         Initiate an SST regridder optionally specfying the input file paths.
 
@@ -154,10 +154,10 @@ class SSTRegridder(regridding_utilities.Regridder):
         self.check_dates()
 
         # Generate a list of lists of filenames
-        self.filename_groups = self.create_filename_groups()
+        self.filename_groups = self.create_filename_groups(input_type=regridding_utilities.InputType.L4)
 
         # Generate a list of lists of filenames for the climatology
-        self.climatology_file_name_groups = self.create_filename_groups(climatology=True)
+        self.climatology_file_name_groups = self.create_filename_groups(regridding_utilities.InputType.CLIMATOLOGY)
 
         # Set the threshold for sea ice fraction
         self.f_max = f_max,
@@ -371,72 +371,11 @@ class SSTRegridder(regridding_utilities.Regridder):
 
         return g
 
-    def get_filename(self, d, climatology):
-        """
-        Generate the name of the input file for a particular date.
-
-        :param d:
-            Python data object.
-
-        :param climatology:
-            Boolean indicating whether to return filenames for the climatology (if True) or the analysed SST (if False).
-
-        :return:
-            The filename as a string.
-        """
-        if climatology:
-            if d.month == 2 and d.day == 29:
-                # If the day is the 29th of February the files for D59 and D60 will be averaged.
-                filename = (os.path.join(self.sst_cci_climatology_path,
-                                         'D059-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc'),
-                            os.path.join(self.sst_cci_climatology_path,
-                                         'D060-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc'))
-            else:
-                # Get day of year as if the year was a non-leap year.
-                day_of_year = date(1982, d.month, d.day).timetuple().tm_yday
-                filename = (os.path.join(self.sst_cci_climatology_path, 'D' + str(day_of_year).zfill(3) +
-                                         '-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc'))
-        else:
-            if d.year >= regridding_constants._c3s_start_year:
-                filename = os.path.join(self.c3s_sst_analysis_l4_path,
-                                        d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'), d.strftime('%Y%m%d') +
-                                        '120000-C3S-L4_GHRSST-SSTdepth-OSTIA-GLOB_ICDR2.0-v02.0-fv01.0.nc')
-            else:
-                filename = os.path.join(self.sst_cci_analysis_l4_path,
-                                        d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'), d.strftime('%Y%m%d') +
-                                        '120000-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc')
-        return filename
-
-    def get_start_end_dates(self, month):
-        """
-        Get the start dates and end dates for a particular month of the year.
-
-        :param month:
-            The month of the year.
-
-        :return:
-            The start date and end date as Python date objects.
-        """
-        days_in_month = monthrange(self.year, month)[1]
-        if month == self.start_month == self.end_month:
-            start_date = date(self.year, month, self.start_day)
-            end_date = date(self.year, month, self.end_day)
-        elif month == self.start_month:
-            start_date = date(self.year, month, self.start_day)
-            end_date = date(self.year, month, days_in_month)
-        elif month == self.end_month:
-            start_date = date(self.year, month, 1)
-            end_date = date(self.year, month, self.end_day)
-        else:
-            start_date = date(self.year, month, 1)
-            end_date = date(self.year, month, days_in_month)
-        return start_date, end_date + timedelta(1)
-
     def check_dates(self):
         """
         Check the dates and time resolution are allowed.
         """
-        if self.year < 1981:
+        if self.year < regridding_constants.cci_start_year:
             raise ValueError('Year out of range.')
         if self.start_month < 1 or self.start_month > 12:
             raise ValueError('Start month out of range.')
@@ -472,81 +411,9 @@ class SSTRegridder(regridding_utilities.Regridder):
         else:  # The time resolution is not recognised
             raise ValueError('Time resolution not recognised.')
 
-    def create_filename_groups(self, climatology=False):
-        """
-        Create a list of lists of filenames. Each group of filenames will be averaged together over time. It is assumed
-        that the dates and time resolution have already been checked for compatibility.
-
-        :param climatology:
-            Boolean indicating whether to return filenames for the climatology (if True) or the analysed SST (if False).
-
-        :return:
-            A list of lists of filenames.
-        """
-        filename_groups = []
-        if self.time_resolution == 'annual':
-            filenames = []
-            start_date = date(self.year, self.start_month, self.start_day)
-            end_date = date(self.year, self.end_month, self.end_day) + timedelta(1)
-            for d in regridding_utilities.daterange(start_date, end_date):
-                filename = self.get_filename(d, climatology)
-                filenames.append(filename)
-            filename_groups.append(filenames)
-        elif self.time_resolution == 'monthly':
-            for month in range(self.start_month, self.end_month + 1):
-                start_date = date(self.year, month, 1)
-                days_in_month = monthrange(self.year, month)[1]
-                end_date = date(self.year, month, days_in_month) + timedelta(1)
-                filenames = []
-                for d in regridding_utilities.daterange(start_date, end_date):
-                    filename = self.get_filename(d, climatology)
-                    filenames.append(filename)
-                filename_groups.append(filenames)
-        elif self.time_resolution == '10-day' or self.time_resolution == '5-day':
-            step = 10 if self.time_resolution == '10-day' else 5
-            break_day = 21 if self.time_resolution == '10-day' else 26
-            for month in range(self.start_month, self.end_month + 1):
-                days_in_month = monthrange(self.year, month)[1]
-                start_date, end_date = self.get_start_end_dates(month)
-                for outer_d in regridding_utilities.daterange(start_date, end_date, step=step):
-                    if outer_d.day < break_day:
-                        inner_drange = regridding_utilities.daterange(outer_d, outer_d + timedelta(step))
-                    else:
-                        inner_drange = regridding_utilities.daterange(outer_d, date(self.year, month, days_in_month) +
-                                                                      timedelta(1))
-                    filenames = []
-                    for inner_d in inner_drange:
-                        filename = self.get_filename(inner_d, climatology)
-                        filenames.append(filename)
-                    filename_groups.append(filenames)
-                    if outer_d.day >= break_day:
-                        break
-        else:
-            start_date = date(self.year, self.start_month, self.start_day)
-            end_date = date(self.year, self.end_month, self.end_day) + timedelta(1)
-            days_in_year = 366 if isleap(self.year) else 365
-            finish = False
-            for i in range(0, days_in_year, self.time_resolution):
-                if i + self.time_resolution >= days_in_year:
-                    drange = regridding_utilities.daterange(start_date + timedelta(i), end_date)
-                elif i + 3 * self.time_resolution / 2 > days_in_year:
-                    drange = regridding_utilities.daterange(start_date + timedelta(i), end_date)
-                    finish = True
-                else:
-                    drange = regridding_utilities.daterange(start_date + timedelta(i),
-                                                            start_date + timedelta(i + self.time_resolution))
-                filenames = []
-                for d in drange:
-                    filename = self.get_filename(d, climatology)
-                    filenames.append(filename)
-                filename_groups.append(filenames)
-                if finish:
-                    break
-        return filename_groups
-
     def make_gridded_ssts(self):
         """
-        Calculate the regridded SSTs.
+        Calculate the regridded L4 SSTs.
         """
         output_paths = []
         # The main code to perform the regridding
@@ -572,9 +439,9 @@ class SSTRegridder(regridding_utilities.Regridder):
                 # Select the sea ice fraction and create longitude and latitude bounds if necessary
                 sif = fl.select_by_property(standard_name='sea_ice_area_fraction')[0]
 
-                # OR the sea ice fraction mask with the SST mask.  In years >= _c3s_start_year, a few cells in the SST
+                # OR the sea ice fraction mask with the SST mask.  In years >= c3s_start_year, a few cells in the SST
                 # field are masked where equivalent cells in other fields are not.
-                if self.year >= regridding_constants._c3s_start_year:
+                if self.year >= regridding_constants.c3s_start_year:
                     np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sif.array), sif.varray, copy=False)
 
                 regridding_utilities.create_lonlat_bounds(sif)
@@ -582,9 +449,9 @@ class SSTRegridder(regridding_utilities.Regridder):
                 # Select the SST uncertainty and create longitude and latitude bounds if necessary
                 sst_uncert = fl.select_by_property(standard_name='sea_water_temperature standard_error')[0]
 
-                # OR the SST uncertainty mask with the SST mask.  In years >= _c3s_start_year, a few cells in the SST
+                # OR the SST uncertainty mask with the SST mask.  In years >= c3s_start_year, a few cells in the SST
                 # field are masked where equivalent cells in other fields are not
-                if self.year >= regridding_constants._c3s_start_year:
+                if self.year >= regridding_constants.c3s_start_year:
                     np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sst_uncert.array),
                                        sst_uncert.varray, copy=False)
 
@@ -645,9 +512,9 @@ class SSTRegridder(regridding_utilities.Regridder):
                         sst_climatology += hl.select_by_property(standard_name='sea_water_temperature')[0]
                         sst_climatology /= 2
 
-                    # OR the climatology mask with the SST mask.  In years >= _c3s_start_year, a few cells in the SST
+                    # OR the climatology mask with the SST mask.  In years >= c3s_start_year, a few cells in the SST
                     # field are masked where equivalent cells in other fields are not
-                    if self.year >= regridding_constants._c3s_start_year:
+                    if self.year >= regridding_constants.c3s_start_year:
                         np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sst_climatology.array),
                                            sst_climatology.varray, copy=False)
 
@@ -786,11 +653,11 @@ if __name__ == '__main__':
     parser.add_argument('--spatial_lambda', type=float, default=_default_spatial_lambda,
                         help='Spatial scale within which errors are assumed to be fully correlated in degrees. '
                              + 'Default is ' + str(_default_spatial_lambda) + ' degrees.')
-    parser.add_argument('--sst_cci_analysis_l4_path', default=regridding_constants._default_sst_cci_analysis_l4_path,
+    parser.add_argument('--sst_cci_analysis_l4_path', default=regridding_constants.default_sst_cci_analysis_l4_path,
                         help='Path to the SST CCI Analysis Level 4 input data.')
-    parser.add_argument('--c3s_sst_analysis_l4_path', default=regridding_constants._default_c3s_sst_analysis_l4_path,
+    parser.add_argument('--c3s_sst_analysis_l4_path', default=regridding_constants.default_c3s_sst_analysis_l4_path,
                         help='Path to the C3S SST Analysis Level 4 input data.')
-    parser.add_argument('--sst_cci_climatology_path', default=regridding_constants._default_sst_cci_climatology_path,
+    parser.add_argument('--sst_cci_climatology_path', default=regridding_constants.default_sst_cci_climatology_path,
                         help='Path to the SST CCI Climatology input data.')
     parser.add_argument('--out_path', default=_default_out_path,
                         help='The path in which to write the output file of regridded data.')

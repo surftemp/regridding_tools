@@ -3,14 +3,11 @@
 import unittest
 
 import cf
-from datetime import datetime
 import numpy as np
-import os
 
 from create_test_data import create_test_data
 
 from makegriddedSSTs import SSTRegridder
-import regridding_utilities
 
 class MakeGriddedSSTsTestCase(unittest.TestCase):
     def test_calculate_k_xy(self):
@@ -79,58 +76,6 @@ class MakeGriddedSSTsTestCase(unittest.TestCase):
 
         # Check the lon and the lat are as expected
         check_k_xy()
-
-    def test_create_filename_groups(self):
-        def check_filename_groups():
-            filename_groups = sst_regridder.create_filename_groups()
-            filenames = [filename for filename_group in filename_groups for filename in filename_group]
-            previous_date = None
-            for filename in filenames:
-                filename = os.path.split(filename)[1]
-                date = datetime.strptime(filename[:8], '%Y%m%d')
-                if previous_date is not None:
-                    self.assertEqual((date - previous_date).days, 1, 'Filenames not contiguous for time resolution: ' +
-                                     str(sst_regridder.time_resolution))
-                previous_date = date
-            self.assertEqual(len(filenames), n_days, 'Unexpected number of filenames for time resolution: ' +
-                             str(sst_regridder.time_resolution))
-            self.assertEqual(len(filename_groups), n_groups,
-                             'Unexpected number of filename groups for time resolution: ' +
-                             str(sst_regridder.time_resolution))
-
-        # Initalise an SST regridder
-        sst_regridder = SSTRegridder()
-
-        sst_regridder.year = 1982
-        sst_regridder.start_month = 1
-        sst_regridder.start_day = 1
-        sst_regridder.end_month = 12
-        sst_regridder.end_day = 31
-        n_days = 365
-
-        sst_regridder.time_resolution = 'annual'
-        n_groups = 1
-        check_filename_groups()
-
-        sst_regridder.time_resolution = 'monthly'
-        n_groups = 12
-        check_filename_groups()
-
-        sst_regridder.time_resolution = '10-day'
-        n_groups = 36
-        check_filename_groups()
-
-        sst_regridder.time_resolution = '5-day'
-        n_groups = 72
-        check_filename_groups()
-
-        sst_regridder.time_resolution = 10
-        n_groups = 37
-        check_filename_groups()
-
-        sst_regridder.time_resolution = 30
-        n_groups = 12
-        check_filename_groups()
 
 
 if __name__ == '__main__':
