@@ -40,6 +40,8 @@ class L3USSTRegridder(regridding_utilities.Regridder):
         :param sst_cci_climatology_path:
             Path to the SST CCI Climatology input data.
         """
+        self.input_type = regridding_utilities.InputType.SST_L3U
+
         self.sst_l3u_path = sst_l3u_path
         self.sst_cci_climatology_path = sst_cci_climatology_path
 
@@ -138,10 +140,10 @@ class L3USSTRegridder(regridding_utilities.Regridder):
         self.check_dates()
 
         # Generate a list of lists of filenames
-        self.filename_groups = self.create_filename_groups(regridding_utilities.InputType.L3U)
+        self.filename_groups = self.create_filename_groups()
 
         # Generate a list of lists of filenames for the climatology
-        self.climatology_file_name_groups = self.create_filename_groups(regridding_utilities.InputType.CLIMATOLOGY)
+        self.climatology_file_name_groups = self.create_filename_groups(climatology=True)
 
         # Set the output paths
         self.out_path = out_path

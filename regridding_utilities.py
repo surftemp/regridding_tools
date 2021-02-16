@@ -14,9 +14,8 @@ import regridding_constants
 
 
 class InputType(Enum):
-    L4 = auto()
-    L3U = auto()
-    CLIMATOLOGY = auto()
+    SST_L4 = auto()
+    SST_L3U = auto()
 
 
 def allowed_lonlat_resolutions(base_resolution, max_resolution, lonlat_range, min_resolution=None):
@@ -252,20 +251,20 @@ class Regridder(object):
         data = cf.Data(array, units=f.units, fill_value=f.fill_value(default='netCDF'), dtype=f.dtype)
         return data
 
-    def get_filename(self, d, input_type):
+    def get_filename(self, d, climatology):
         """
         Generate the name of the input file for a particular date.
 
         :param d:
             Python data object.
 
-        :param input_type:
-            Enum indicating the type of input to return a filename for (L4, L3U or CLIMATOLOGY).
+        :param climatology:
+            Boolean indicating whether to return the filename for the climatology.
 
         :return:
             The filename as a string.
         """
-        if input_type is InputType.CLIMATOLOGY:
+        if climatology:
             if d.month == 2 and d.day == 29:
                 # If the day is the 29th of February the files for D59 and D60 will be averaged.
                 filename = (os.path.join(self.sst_cci_climatology_path,
@@ -277,7 +276,7 @@ class Regridder(object):
                 day_of_year = date(1982, d.month, d.day).timetuple().tm_yday
                 filename = (os.path.join(self.sst_cci_climatology_path, 'D' + str(day_of_year).zfill(3) +
                                          '-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc'))
-        elif input_type is InputType.L4:
+        elif self.input_type is InputType.SST_L4:
             if d.year >= regridding_constants.c3s_start_year:
                 filename = os.path.join(self.c3s_sst_analysis_l4_path,
                                         d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'), d.strftime('%Y%m%d') +
@@ -286,7 +285,7 @@ class Regridder(object):
                 filename = os.path.join(self.sst_cci_analysis_l4_path,
                                         d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'), d.strftime('%Y%m%d') +
                                         '120000-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc')
-        elif input_type is InputType.L3U:
+        elif self.input_type is InputType.SST_L3U:
             filename = glob.glob(os.path.join(self.sst_l3u_path, self.sensor, d.strftime('%Y'), d.strftime('%m'),
                                               d.strftime('%d'), '*.nc'))
         else:
@@ -318,13 +317,13 @@ class Regridder(object):
             end_date = date(self.year, month, days_in_month)
         return start_date, end_date + timedelta(1)
 
-    def create_filename_groups(self, input_type):
+    def create_filename_groups(self, climatology=False):
         """
         Create a list of lists of filenames. Each group of filenames will be averaged together over time. It is assumed
         that the dates and time resolution have already been checked for compatibility.
 
-        :param input_type:
-            Enum indicating which input type to return filenames for.
+        :param climatology:
+            Boolean indicating whether to generate the filename groups for the climatology.
 
         :return:
             A list of lists of filenames.
@@ -335,7 +334,7 @@ class Regridder(object):
             start_date = date(self.year, self.start_month, self.start_day)
             end_date = date(self.year, self.end_month, self.end_day) + timedelta(1)
             for d in daterange(start_date, end_date):
-                filename = self.get_filename(d, input_type)
+                filename = self.get_filename(d, climatology)
                 filenames.append(filename)
             filename_groups.append(filenames)
         elif self.time_resolution == 'monthly':
@@ -345,7 +344,7 @@ class Regridder(object):
                 end_date = date(self.year, month, days_in_month) + timedelta(1)
                 filenames = []
                 for d in daterange(start_date, end_date):
-                    filename = self.get_filename(d, input_type)
+                    filename = self.get_filename(d, climatology)
                     filenames.append(filename)
                 filename_groups.append(filenames)
         elif self.time_resolution == '10-day' or self.time_resolution == '5-day':
@@ -361,7 +360,7 @@ class Regridder(object):
                         inner_drange = daterange(outer_d, date(self.year, month, days_in_month) + timedelta(1))
                     filenames = []
                     for inner_d in inner_drange:
-                        filename = self.get_filename(inner_d, input_type)
+                        filename = self.get_filename(inner_d, climatology)
                         filenames.append(filename)
                     filename_groups.append(filenames)
                     if outer_d.day >= break_day:
@@ -381,9 +380,174 @@ class Regridder(object):
                     drange = daterange(start_date + timedelta(i), start_date + timedelta(i + self.time_resolution))
                 filenames = []
                 for d in drange:
-                    filename = self.get_filename(d, input_type)
+                    filename = self.get_filename(d, climatology)
                     filenames.append(filename)
                 filename_groups.append(filenames)
                 if finish:
                     break
         return filename_groups
+
+    def update_field(self, filenames, standard_name, resampled_data):
+        """
+        Create an updated field with new data, longitudes, latitudes and a modified time stamp.
+
+        :param filenames:
+            The filenames in the time series.
+
+        :param standard_name:
+            The standard name of the field to be updated.
+
+        :param resampled_data:
+            The new data.
+
+        :return:
+            The new field.
+        """
+        # Get the first and the last field
+        fl = cf.read(filenames[0], aggregate=False)
+        first_field = fl.select_by_property(standard_name=standard_name)[0]
+
+        gl = cf.read(filenames[-1], aggregate=False)
+        last_field = gl.select_by_property(standard_name=standard_name)[0]
+
+        # Copy the field without the data
+        g = first_field.copy(data=False)
+
+        # Replace the longitudes and latitudes with the resampled ones
+        lon_key = g.dimension_coordinate('X', key=True)
+        lat_key = g.dimension_coordinate('Y', key=True)
+        lon_axis = g.domain_axis(lon_key, key=True)
+        lat_axis = g.domain_axis(lat_key, key=True)
+        g.domain_axes[lon_axis].set_size(self.lon.size)
+        g.domain_axes[lat_axis].set_size(self.lat.size)
+        g.set_construct(self.lon, axes=(lon_key,))
+        g.set_construct(self.lat, axes=(lat_key,))
+
+        # Get the time coordinates
+        time = first_field.dimension_coordinate('T').copy()
+        time_units = time.units
+        time_dtype = time.dtype
+        dtarray = time.datetime_array
+        if time.has_bounds():
+            bounds_dtarray = time.bounds.datetime_array
+        else:
+            bounds = time.create_bounds(cellsize=cf.D())
+            bounds.nc_set_variable('time_bnds')
+            bounds.nc_set_dimension('bnds')
+            bounds_dtarray = bounds.datetime_array
+            time.set_bounds(bounds)
+        dt = dtarray[0]
+        start_dt = bounds_dtarray[0, 0]
+        time2 = last_field.dimension_coordinate('T')
+        if time2.has_bounds():
+            end_dt = time2.bounds.datetime_array[0, 1]
+        else:
+            end_dt = time2.create_bounds(cellsize=cf.D()).datetime_array[0, 1]
+
+        # Modify the time stamps
+        if self.time_resolution == 'annual':
+            dtarray[0] = cf.dt(dt.year, 7, 1, calendar='gregorian')
+        elif self.time_resolution == 'monthly':
+            dtarray[0] = cf.dt(dt.year, dt.month, 15, 12, calendar='gregorian')
+        elif self.time_resolution == '10-day':
+            day = dt.day
+            if day <= 10:
+                new_day = 5
+            elif day <= 20:
+                new_day = 15
+            else:
+                new_day = 25
+            dtarray[0] = cf.dt(dt.year, dt.month, new_day, 12, calendar='gregorian')
+        elif self.time_resolution == '5-day':
+            day = dt.day
+            if day <= 5:
+                new_day = 3
+            elif day <= 10:
+                new_day = 8
+            elif day <= 15:
+                new_day = 13
+            elif day <= 20:
+                new_day = 18
+            elif day <= 25:
+                new_day = 23
+            else:
+                if dt.month == 2:
+                    new_day = 27
+                else:
+                    new_day = 28
+            dtarray[0] = cf.dt(dt.year, dt.month, new_day, 12, calendar='gregorian')
+        else:
+            dtarray[0] = start_dt + ((end_dt - start_dt) / 2)
+        bounds_dtarray[0, 1] = end_dt
+
+        # Insert the modified time stamps
+        time.set_data(cf.Data(dtarray, units=time_units, dtype=time_dtype))
+        time.bounds.set_data(cf.Data(bounds_dtarray, units=time_units, dtype=time_dtype))
+
+        # Insert the updated time coordinate
+        time_key = g.dimension_coordinate('T', key=True)
+        time_axis = g.domain_axis(time_key, key=True)
+        g.set_construct(time, axes=(time_key,))
+
+        # Insert the data in the new field
+        g.set_data(resampled_data, axes=(time_axis, lat_axis, lon_axis))
+
+        # Remove valid_min and valid_max
+        del g.valid_min
+        del g.valid_max
+
+        # Update time related metadata
+        g.set_property('stop_time', last_field.get_property('stop_time'))
+        g.set_property('time_coverage_end', last_field.get_property('time_coverage_end'))
+        if self.time_resolution == 'annual':
+            time_coverage_duration = 'P1Y'
+        elif self.time_resolution == 'monthly':
+            time_coverage_duration = 'P1M'
+        else:
+            time_coverage_duration = 'P' + str(len(filenames)) + 'D'
+        g.set_property('time_coverage_duration', time_coverage_duration)
+        g.set_property('time_coverage_resolution', time_coverage_duration)
+
+        # Change global attributes
+        g.set_property('geospatial_lon_resolution', np.float32(self.lon_resolution))
+        g.set_property('geospatial_lat_resolution', np.float32(self.lat_resolution))
+        if self.lon_resolution == self.lat_resolution:
+            g.set_property('spatial_resolution', str(self.lon_resolution) + ' degree')
+        else:
+            g.set_property('spatial_resolution', str(self.lon_resolution) + ' x ' + str(self.lat_resolution) +
+                           ' degree')
+        g.set_property('creator_processing_institution', 'These data were produced by the University of ' +
+                       'Reading as part of the ESA CCI project.')
+        if self.input_type is InputType.SST_L4:
+            g.set_property('acknowledgment', 'Regridding service funded by National Centre for Earth ' +
+                           'Observation, UK')
+
+        # Tweak metadata as discussed in https://github.com/surftemp/sst-services/issues/17
+        if self.input_type is InputType.SST_L4:
+            g.set_property('summary', 'Regridding of L4 analysis product from the ESA SST CCI project')
+        g.set_property('creator_email','c.j.merchant@reading.ac.uk')
+        g.set_property('publisher_email', 'c.j.merchant@reading.ac.uk')
+        if self.input_type is InputType.SST_L4:
+            g.set_property('references','Merchant, C.J., Embury, O., Bulgin, C.E., Block, T., Corlett, G.K., Fiedler, E., Good, S.A., Mittaz, J., Rayner, N.A., Berry, D., Eastwood, S., Taylor, M., Tsushima, Y., Waterfall, A., Wilson, R. and Donlon, C. (2019), Satellite-based time-series of sea-surface temperature since 1981 for climate applications. Scientific Data 6, 223, doi:10.1038/s41597-019-0236-x, and Merchant, C. J. and Embury, O. (2020) Adjusting for desert-dust-related biases in a climate data record of sea surface temperature. Remote Sensing, 12 (16). 2554. ISSN 2072-4292 doi:10.3390/rs12162554')
+        g.set_property('creator_url','http://climate.esa.int/')
+        g.set_property('metadata_link','http://climate.esa.int/')
+        if self.input_type is InputType.SST_L4:
+            g.set_property('title','ESA SST CCI L4 analysis')
+            g.set_property('history','Created by makegriddedSSTs.py v1.0 operating on SST CCI L4 analysis products')
+        elif self.input_type is InputType.SST_L3U:
+            g.set_property('history', 'Created by makegriddedL3USSTs.py v1.0 operating on SST CCI L3U products')
+
+        g.del_property('product_specification_version')
+        if self.input_type is InputType.SST_L4:
+            g.nc_set_global_attribute('f_max', self.f_max)
+            g.nc_set_global_attribute('lambda', self.spatial_lambda)
+            g.nc_set_global_attribute('tau', np.int32(self.tau))
+        g.set_property('date_created', self.date_created)
+        g.set_property('uuid', self.uuid)
+        g.set_property('tracking_id', self.uuid)
+
+        # Close the fields
+        fl.close()
+        gl.close()
+
+        return g
