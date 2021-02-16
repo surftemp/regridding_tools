@@ -153,10 +153,14 @@ class L3USSTRegridder(regridding_utilities.Regridder):
 
         # Read in the first SST field
         flat_list = [item for sublist in self.filename_groups for item in sublist]
+        is_data = False
         for item in flat_list:
             if item:
                 fl = cf.read(item[0])
+                is_data = True
                 break
+        if not is_data:
+            raise ValueError('No data found.')
         sst = fl.select_by_property(standard_name='sea_surface_skin_temperature')[0]
 
         # Create longitude and latitude bounds if necessary
