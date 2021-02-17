@@ -153,25 +153,17 @@ class L3USSTRegridder(regridding_utilities.Regridder):
         self.date_created = datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')
         self.uuid = str(uuid4())
 
-        # Read in the first SST field
-        flat_list = [item for sublist in self.filename_groups for item in sublist]
-        is_data = False
-        for item in flat_list:
-            if item:
-                fl = cf.read(item[0])
-                is_data = True
-                break
-        if not is_data:
-            raise ValueError('No data found.')
-        sst = fl.select_by_property(standard_name='sea_surface_skin_temperature')[0]
-
-        # Create longitude and latitude bounds if necessary
-        regridding_utilities.create_lonlat_bounds(sst)
+        # Read in the first SST Climatology field
+        fl = cf.read(self.climatology_file_name_groups[0][0])
+        sst = fl.select_by_property(standard_name='sea_water_temperature')[0]
 
         # Make the weights
-        self.weights = sst.weights('area', scale=1.0)
+        self.weights = sst.weights('area', scale=1.0).array
 
-        # Close the files
+        # Resample the longitude and latitude
+        self.resample_lonlat(sst)
+
+        # Close the file
         fl.close()
 
         # Do the regridding
@@ -201,8 +193,126 @@ class L3USSTRegridder(regridding_utilities.Regridder):
         """
         Calculate the regridded L3U SSTs.
         """
-        # TODO
-        pass
+        output_paths = []
+        # The main code to perform the regridding
+        for filename_group, climatology_filename_group in zip(self.filename_groups, self.climatology_file_name_groups):
+            resampled_sst_climatology_data = None
+            sst_climatology_denominator = None
+            resampled_sst_data = None
+            sst_denominator = None
+            n = None
+
+            # Create a flat list of the input files and check it is not empty
+            flat_list = [item for sublist in filename_group for item in sublist]
+            if not flat_list:
+                continue
+
+            # Read in and regrid the SST
+            for filenames, climatology_filename in zip(filename_group, climatology_filename_group):
+                # Read in and regrid the climatology
+                if type(climatology_filename) is str:
+                    gl = cf.read(climatology_filename, aggregate=False)
+                    sst_climatology = gl.select_by_property(standard_name='sea_water_temperature')[0]
+                else:
+                    # The climatology is a tuple of two fields on 29 February, which must be averaged
+                    gl = cf.read(climatology_filename[0], aggregate=False)
+                    sst_climatology = gl.select_by_property(standard_name='sea_water_temperature')[0]
+                    hl = cf.read(climatology_filename[1], aggregate=False)
+                    sst_climatology += hl.select_by_property(standard_name='sea_water_temperature')[0]
+                    sst_climatology /= 2
+                # Resample the climatology to the lower resolution and aggregate it
+                data = self.spatially_resample_data(sst_climatology, weights=True)
+                if resampled_sst_climatology_data is None:
+                    resampled_sst_climatology_data = data
+                else:
+                    resampled_sst_climatology_data = regridding_utilities.add_data(resampled_sst_climatology_data,
+                                                                                   data)
+                gl.close()
+                if type(climatology_filename) is not str:
+                    hl.close()
+                # Calculate the denominator for averaging
+                data = self.spatially_resample_data(sst_climatology.where(True, 1.0), weights=True)
+                if sst_climatology_denominator is None:
+                    sst_climatology_denominator = data
+                else:
+                    sst_climatology_denominator = regridding_utilities.add_data(sst_climatology_denominator, data)
+
+                for filename in filenames:
+                    # Read in data
+                    fl = cf.read(filename, aggregate=False)
+
+                    # Select the SST and create longitude and latitude bounds if necessary
+                    sst = fl.select_by_property(standard_name='sea_surface_skin_temperature')[0]
+                    regridding_utilities.create_lonlat_bounds(sst)
+
+                    # Calculate the regridded SST anomaly
+                    sst -= sst_climatology.array
+                    data = self.spatially_resample_data(sst, weights=True)
+                    if resampled_sst_data is None:
+                        resampled_sst_data = data
+                    else:
+                        resampled_sst_data = regridding_utilities.add_data(resampled_sst_data, data)
+
+                    # Calculate the denominator for averaging
+                    data = self.spatially_resample_data(sst.where(True, 1.0), weights=True)
+                    if sst_denominator is None:
+                        sst_denominator = data
+                    else:
+                        sst_denominator = regridding_utilities.add_data(sst_denominator, data)
+
+                    # Calculate the number of observations used in each target cell
+                    data = self.spatially_resample_data(sst.where(True, 1.0))
+                    if n is None:
+                        n = data
+                    else:
+                        n = regridding_utilities.add_data(n, data)
+
+                    fl.close()
+
+            # Finalise the climatology regridding calculation
+            resampled_sst_climatology_data /= sst_climatology_denominator
+
+            # Average the summed data
+            resampled_sst_data /= sst_denominator
+            if not self.anomalies:
+                resampled_sst_data += resampled_sst_climatology_data.array
+
+            # Create the resampled sst field
+            resampled_sst = self.update_field(flat_list, 'sea_surface_skin_temperature', resampled_sst_data)
+            if self.anomalies:
+                resampled_sst.nc_set_variable('sst_anomaly')
+                resampled_sst.standard_name = 'sea_water_temperature_anomaly'
+                resampled_sst.long_name = 'regridded L3U sea surface temperature anomaly'
+            else:
+                resampled_sst.nc_set_variable('sst')
+                resampled_sst.long_name = 'regridded L3U sea surface temperature'
+            resampled_sst.comment = 'These data were produced by the University of Reading as part of the ESA ' + \
+                                    'CCI project.'
+
+            # Get the date of the resampled SST
+            dt = resampled_sst.dimension_coordinate('T').datetime_array[0]
+
+            # Create a field list with all the fields in it
+            fl = cf.FieldList()
+            fl.append(resampled_sst)
+            fl.append(regridding_utilities.create_time_field(sst, 'calendar_year', 'calendar year', dt.year))
+            fl.append(regridding_utilities.create_time_field(sst, 'calendar_month', 'calendar month', dt.month))
+            fl.append(regridding_utilities.create_time_field(sst, 'day_of_month', 'day of month', dt.day))
+            fl.append(regridding_utilities.create_time_field(sst, 'day_of_year', 'day of year', dt.dayofyr))
+
+            # Write the data
+            output_path = os.path.join(self.out_path, dt.strftime('%Y%m%d') + '_regridded_sst.nc')
+            cf.write(fl, output_path, datatype={np.dtype('float64'): np.dtype('float32')}, compress=1,
+                     least_significant_digit=3)
+            output_paths.append(output_path)
+
+        # if specified, zip up all output files and remove the originals
+        if self.zip_name:
+            zip_path = os.path.join(self.out_path, self.zip_name)
+            with zipfile.ZipFile(zip_path, "w") as z:
+                for output_path in output_paths:
+                    z.write(output_path, os.path.split(output_path)[1])
+                    os.unlink(output_path)
 
 
 if __name__ == '__main__':

@@ -286,8 +286,8 @@ class Regridder(object):
                                         d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'), d.strftime('%Y%m%d') +
                                         '120000-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc')
         elif self.input_type is InputType.SST_L3U:
-            filename = glob.glob(os.path.join(self.sst_l3u_path, self.sensor, d.strftime('%Y'), d.strftime('%m'),
-                                              d.strftime('%d'), '*.nc'))
+            filename = sorted(glob.glob(os.path.join(self.sst_l3u_path, self.sensor, d.strftime('%Y'), d.strftime('%m'),
+                                                     d.strftime('%d'), '*.nc')))
         else:
             raise ValueError('Input type not recognized.')
         return filename
