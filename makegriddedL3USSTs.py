@@ -200,7 +200,7 @@ class L3USSTRegridder(regridding_utilities.Regridder):
             sst_climatology_denominator = None
             resampled_sst_data = None
             sst_denominator = None
-            n = None
+            n_data = None
 
             # Create a flat list of the input files and check it is not empty
             flat_list = [item for sublist in filename_group for item in sublist]
@@ -262,10 +262,10 @@ class L3USSTRegridder(regridding_utilities.Regridder):
 
                     # Calculate the number of observations used in each target cell
                     data = self.spatially_resample_data(sst.where(True, 1.0))
-                    if n is None:
-                        n = data
+                    if n_data is None:
+                        n_data = data
                     else:
-                        n = regridding_utilities.add_data(n, data)
+                        n_data = regridding_utilities.add_data(n_data, data)
 
                     fl.close()
 
@@ -289,12 +289,17 @@ class L3USSTRegridder(regridding_utilities.Regridder):
             resampled_sst.comment = 'These data were produced by the University of Reading as part of the ESA ' + \
                                     'CCI project.'
 
+            # Create the field n with the number of data points contributing to each cell
+            n = self.update_field(flat_list, 'sea_surface_skin_temperature', n_data)
+            n.nc_set_variable('n')
+
             # Get the date of the resampled SST
             dt = resampled_sst.dimension_coordinate('T').datetime_array[0]
 
             # Create a field list with all the fields in it
             fl = cf.FieldList()
             fl.append(resampled_sst)
+            fl.append(n)
             fl.append(regridding_utilities.create_time_field(sst, 'calendar_year', 'calendar year', dt.year))
             fl.append(regridding_utilities.create_time_field(sst, 'calendar_month', 'calendar month', dt.month))
             fl.append(regridding_utilities.create_time_field(sst, 'day_of_month', 'day of month', dt.day))
