@@ -287,7 +287,9 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                 resampled_sst.long_name = 'regridded L3U sea surface temperature anomaly'
             else:
                 resampled_sst.nc_set_variable('sst')
+                resampled_sst.standard_name = 'sea_water_temperature'
                 resampled_sst.long_name = 'regridded L3U sea surface temperature'
+            resampled_sst.override_units('kelvin', inplace=True)
             resampled_sst.comment = 'These data were produced by the University of Reading as part of the ESA ' + \
                                     'CCI project.'
 
@@ -296,7 +298,7 @@ class L3USSTRegridder(regridding_utilities.Regridder):
             n.nc_set_variable('n')
             n.standard_name = 'number_of_observations'
             n.long_name = 'number of observations'
-            n.override_units(1)
+            n.override_units('1', inplace=True)
             n.comment = 'Number of L3U cells contributing to the average.'
             n.del_property('depth')
             n.del_property('source')
