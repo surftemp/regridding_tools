@@ -241,7 +241,7 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                     fl = cf.read(filename, aggregate=False)
 
                     # Select the SST and create longitude and latitude bounds if necessary
-                    sst = fl.select_by_property(standard_name='sea_surface_skin_temperature')[0]
+                    sst = fl.select_by_property(standard_name='sea_water_temperature')[0]
                     regridding_utilities.create_lonlat_bounds(sst)
 
                     # Select the quality level
@@ -280,7 +280,7 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                 resampled_sst_data += resampled_sst_climatology_data.array
 
             # Create the resampled sst field
-            resampled_sst = self.update_field(flat_list, 'sea_surface_skin_temperature', resampled_sst_data)
+            resampled_sst = self.update_field(flat_list, 'sea_water_temperature', resampled_sst_data)
             if self.anomalies:
                 resampled_sst.nc_set_variable('sst_anomaly')
                 resampled_sst.standard_name = 'sea_water_temperature_anomaly'
@@ -294,7 +294,7 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                                     'CCI project.'
 
             # Create the field n with the number of data points contributing to each cell
-            n = self.update_field(flat_list, 'sea_surface_skin_temperature', n_data)
+            n = self.update_field(flat_list, 'sea_water_temperature', n_data)
             n.nc_set_variable('n')
             n.standard_name = 'number_of_observations'
             n.long_name = 'number of observations'
