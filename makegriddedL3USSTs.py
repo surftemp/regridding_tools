@@ -225,8 +225,7 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                 if resampled_sst_climatology_data is None:
                     resampled_sst_climatology_data = data
                 else:
-                    resampled_sst_climatology_data = regridding_utilities.add_data(resampled_sst_climatology_data,
-                                                                                   data)
+                    resampled_sst_climatology_data = regridding_utilities.add_data(resampled_sst_climatology_data, data)
                 gl.close()
                 if type(climatology_filename) is not str:
                     hl.close()
@@ -245,9 +244,12 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                     sst = fl.select_by_property(standard_name='sea_surface_skin_temperature')[0]
                     regridding_utilities.create_lonlat_bounds(sst)
 
+                    # Select the quality level
+                    qlevel = fl.select_by_ncvar('quality_level')[0]
+
                     # Calculate the regridded SST anomaly
                     sst -= sst_climatology.array
-                    data = self.spatially_resample_data(sst, weights=True)
+                    data = self.spatially_resample_data(sst.where(qlevel < self.min_qlevel, cf.masked), weights=True)
                     if resampled_sst_data is None:
                         resampled_sst_data = data
                     else:
@@ -261,7 +263,7 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                         sst_denominator = regridding_utilities.add_data(sst_denominator, data)
 
                     # Calculate the number of observations used in each target cell
-                    data = self.spatially_resample_data(sst.where(True, 1.0))
+                    data = self.spatially_resample_data(sst.where(qlevel >= self.min_qlevel, 1.0))
                     if n_data is None:
                         n_data = data
                     else:
@@ -292,6 +294,12 @@ class L3USSTRegridder(regridding_utilities.Regridder):
             # Create the field n with the number of data points contributing to each cell
             n = self.update_field(flat_list, 'sea_surface_skin_temperature', n_data)
             n.nc_set_variable('n')
+            n.standard_name = 'number_of_observations'
+            n.long_name = 'number of observations'
+            n.override_units(1)
+            n.comment = 'Number of L3U cells contributing to the average.'
+            n.del_property('depth')
+            n.del_property('source')
 
             # Get the date of the resampled SST
             dt = resampled_sst.dimension_coordinate('T').datetime_array[0]
@@ -300,10 +308,10 @@ class L3USSTRegridder(regridding_utilities.Regridder):
             fl = cf.FieldList()
             fl.append(resampled_sst)
             fl.append(n)
-            fl.append(regridding_utilities.create_time_field(sst, 'calendar_year', 'calendar year', dt.year))
-            fl.append(regridding_utilities.create_time_field(sst, 'calendar_month', 'calendar month', dt.month))
-            fl.append(regridding_utilities.create_time_field(sst, 'day_of_month', 'day of month', dt.day))
-            fl.append(regridding_utilities.create_time_field(sst, 'day_of_year', 'day of year', dt.dayofyr))
+            fl.append(regridding_utilities.create_time_field(n, 'calendar_year', 'calendar year', dt.year))
+            fl.append(regridding_utilities.create_time_field(n, 'calendar_month', 'calendar month', dt.month))
+            fl.append(regridding_utilities.create_time_field(n, 'day_of_month', 'day of month', dt.day))
+            fl.append(regridding_utilities.create_time_field(n, 'day_of_year', 'day of year', dt.dayofyr))
 
             # Write the data
             output_path = os.path.join(self.out_path, dt.strftime('%Y%m%d') + '_regridded_sst.nc')
