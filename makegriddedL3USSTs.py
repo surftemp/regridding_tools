@@ -260,7 +260,7 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                     qlevel = fl.select_by_ncvar('quality_level')[0]
 
                     # Calculate the regridded SST anomaly
-                    sst -= sst_climatology.array
+                    sst -= sst_climatology
                     data = self.spatially_resample_data(sst.where(qlevel < self.min_qlevel, cf.masked), weights=True)
                     if resampled_sst_data is None:
                         resampled_sst_data = data
@@ -268,14 +268,14 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                         resampled_sst_data = regridding_utilities.add_data(resampled_sst_data, data)
 
                     # Calculate the denominator for averaging
-                    data = self.spatially_resample_data(sst.where(True, 1.0), weights=True)
+                    data = self.spatially_resample_data(sst.where(qlevel < self.min_qlevel, cf.masked, 1.0), weights=True)
                     if sst_denominator is None:
                         sst_denominator = data
                     else:
                         sst_denominator = regridding_utilities.add_data(sst_denominator, data)
 
                     # Calculate the number of observations used in each target cell
-                    data = self.spatially_resample_data(sst.where(qlevel >= self.min_qlevel, 1.0))
+                    data = self.spatially_resample_data(sst.where(qlevel < self.min_qlevel, 0, 1))
                     if n_data is None:
                         n_data = data
                     else:
