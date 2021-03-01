@@ -153,12 +153,20 @@ class L3USSTRegridder(regridding_utilities.Regridder):
         self.date_created = datetime.now().strftime('%Y-%m-%dT%H:%M:%SZ')
         self.uuid = str(uuid4())
 
-        # Read in the first SST Climatology field
-        fl = cf.read(self.climatology_file_name_groups[0][0])
+        # Read in the first SST L3U field
+        flat_list = [item for sublist in self.filename_groups for subsublist in sublist for item in subsublist]
+        if not flat_list:
+            raise ValueError('No input data found.')
+        fl = cf.read(flat_list[0])
         sst = fl.select_by_property(standard_name='sea_water_temperature')[0]
 
         # Make the weights
-        self.weights = sst.weights('area', scale=1.0).array
+        self.weights = sst.weights('area', scale=1.0)
+
+        # Save the original longitude and latitude as those of the climatology need to be replaced with these as
+        # they differ in metadata and by rounding errors.
+        self.orig_lon = sst.dim('X').copy()
+        self.orig_lat = sst.dim('Y').copy()
 
         # Resample the longitude and latitude
         self.resample_lonlat(sst)
@@ -220,6 +228,10 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                     hl = cf.read(climatology_filename[1], aggregate=False)
                     sst_climatology += hl.select_by_property(standard_name='sea_water_temperature')[0]
                     sst_climatology /= 2
+                # Replace the latitude and longitude dimension coordinates in the climatology with the ones from the L3U
+                # data as they are incompatible because of metadata and rounding differences.
+                sst_climatology.replace_construct('X', self.orig_lon)
+                sst_climatology.replace_construct('Y', self.orig_lat)
                 # Resample the climatology to the lower resolution and aggregate it
                 data = self.spatially_resample_data(sst_climatology, weights=True)
                 if resampled_sst_climatology_data is None:
