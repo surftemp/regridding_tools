@@ -275,7 +275,10 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                         sst_denominator = regridding_utilities.add_data(sst_denominator, data)
 
                     # Calculate the number of observations used in each target cell
-                    data = self.spatially_resample_data(sst.where(qlevel < self.min_qlevel, 0, 1))
+                    f_tmp = sst.where(qlevel < self.min_qlevel, 0, 1)
+                    f_tmp.data.filled(0, inplace=True)
+                    f_tmp.dtype = np.int32
+                    data = self.spatially_resample_data(f_tmp)
                     if n_data is None:
                         n_data = data
                     else:
@@ -329,8 +332,9 @@ class L3USSTRegridder(regridding_utilities.Regridder):
 
             # Write the data
             output_path = os.path.join(self.out_path, dt.strftime('%Y%m%d') + '_regridded_sst.nc')
-            cf.write(fl, output_path, datatype={np.dtype('float64'): np.dtype('float32')}, compress=1,
-                     least_significant_digit=3)
+            cf.write(fl, output_path, datatype={np.dtype('float64'): np.dtype('float32'),
+                                                np.dtype('int64'): np.dtype('int32')},
+                     compress=1, least_significant_digit=3)
             output_paths.append(output_path)
 
         # if specified, zip up all output files and remove the originals
