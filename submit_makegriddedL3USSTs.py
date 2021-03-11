@@ -25,7 +25,7 @@ def submit_makegriddedL3USSTs(sensor, sst_l3u_path, out_path):
     """
     out_path = out_path + sensor
     os.makedirs(out_path, exist_ok=True)
-    years = glob.glob(os.path.join(sst_l3u_path, sensor, '[0-9]' * 4))
+    years = [os.path.basename(dir) for dir in glob.glob(os.path.join(sst_l3u_path, sensor, '[0-9]' * 4))]
     for year in years:
         with open(_submission_script_file, 'w') as f:
             f.write(_submission_script.format(sensor, year, sst_l3u_path, out_path))
