@@ -7,8 +7,7 @@ _submission_script = """#!/bin/bash
 #SBATCH --partition=short-serial
 #SBATCH -o makegriddedL3USSTs_{0}_{1}.out
 #SBATCH -e makegriddedL3USSTs_{0}_{1}.err
-#SBATCH --time=12:00:00
-#SBATCH --mem=2000
+#SBATCH --time=24:00:00
 
 conda activate regridding_tools
 python ./makegriddedL3USSTs.py 5 5 monthly {0} --year {1} --sst_l3u_path {2} --out_path {3}
