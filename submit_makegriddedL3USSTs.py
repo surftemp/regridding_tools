@@ -23,6 +23,8 @@ def submit_makegriddedL3USSTs(sensor, sst_l3u_path, out_path):
     :param out_path:
     :return:
     """
+    out_path = out_path + sensor
+    os.makedirs(out_path, exist_ok=True)
     years = glob.glob(os.path.join(sst_l3u_path, sensor, '[0-9]' * 4))
     for year in years:
         with open(_submission_script_file, 'w') as f:
