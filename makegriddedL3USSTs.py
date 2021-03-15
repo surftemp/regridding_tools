@@ -18,6 +18,7 @@ _default_start_month = 1
 _default_end_month = 12
 _default_anomalies = False
 _default_min_qlevel = 4
+_default_min_flevel = 3
 _default_out_path = '/Users/charles/Data/l3u_regrid_test'
 _default_zip_name = ''
 
@@ -62,7 +63,8 @@ class L3USSTRegridder(regridding_utilities.Regridder):
 
     def __call__(self, lon_resolution, lat_resolution, time_resolution, sensor, year=_default_year,
                  start_month=_default_start_month, end_month=_default_end_month, anomalies=_default_anomalies,
-                 min_qlevel=_default_min_qlevel, out_path=_default_out_path, zip_name=_default_zip_name):
+                 min_qlevel=_default_min_qlevel, min_flevel=_default_min_flevel, out_path=_default_out_path,
+                 zip_name=_default_zip_name):
         """
         Regrid the L3U SSTs to a target resolution.
 
@@ -96,6 +98,9 @@ class L3USSTRegridder(regridding_utilities.Regridder):
             The minimum quality level of the L3U cell SST for inclusion. Default set by _default_min_qlevel. If 4 then
             quality levels 4 and 5 are included. Minimum is 3 such that quality levels 3, 4 and 5 anre included.
             Maximum is 5 such that only quality level 5 is included.
+
+        :param min_flevel:
+            The minimum file quality level for inclusion. Default set by _default_min_flevel. An integer from 0 to 3.
 
         :param out_path:
             The path in which to write the output file of regridded data.
@@ -135,6 +140,11 @@ class L3USSTRegridder(regridding_utilities.Regridder):
         assert type(min_qlevel) is int, 'Minimum quality level must be an integer.'
         assert 3 <= min_qlevel <= 5, 'Minimum quality level out of range.'
         self.min_qlevel = min_qlevel
+
+        # Set the minimum file quality level
+        assert type(min_flevel) is int, 'Minimum file quality level must be an integer.'
+        assert 0 <= min_flevel <= 3, 'Minimum file quality level out of range.'
+        self.min_flevel = min_flevel
 
         # Check the dates and time resolution
         self.check_dates()
@@ -248,6 +258,9 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                 else:
                     sst_climatology_denominator = regridding_utilities.add_data(sst_climatology_denominator, data)
 
+                # Finalise the climatology regridding calculation
+                resampled_sst_climatology_data /= sst_climatology_denominator
+
                 for filename in filenames:
                     # Read in data
                     fl = cf.read(filename, aggregate=False)
@@ -255,6 +268,10 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                     # Select the SST and create longitude and latitude bounds if necessary
                     sst = fl.select_by_property(standard_name='sea_water_temperature')[0]
                     regridding_utilities.create_lonlat_bounds(sst)
+
+                    # Check the file quality level
+                    if sst.get_property('file_quality_level') < self.min_flevel:
+                        continue
 
                     # Select the quality level
                     qlevel = fl.select_by_ncvar('quality_level')[0]
@@ -286,8 +303,15 @@ class L3USSTRegridder(regridding_utilities.Regridder):
 
                     fl.close()
 
-            # Finalise the climatology regridding calculation
-            resampled_sst_climatology_data /= sst_climatology_denominator
+            # If all the files were below the minimum file quality level then the resampled_sst_data will be None and
+            # we can continue.
+            if resampled_sst_data is None:
+                continue
+
+            # If all the data is masked because it fell below the minimum quality level then it does not make sense to
+            # write out the file and we can continue.
+            if (resampled_sst_data.mask == True).all():
+                continue
 
             # Average the summed data
             resampled_sst_data /= sst_denominator
@@ -366,11 +390,14 @@ if __name__ == '__main__':
                         help='The final month of the data to be regridded. Default is ' + str(_default_end_month) + '.')
     parser.add_argument('--anomalies', action='store_true', default=False,
                         help='Output anomalies instead of absolute SSTs.')
-    parser.add_argument('--min_qlevel', default=_default_min_qlevel,
+    parser.add_argument('--min_qlevel', type=int, default=_default_min_qlevel,
                         help='The minimum quality level of the L3U cell SST for inclusion. Default is '
                              + str(_default_min_qlevel) + '. If 4 then quality levels 4 and 5 are included. Minimum is '
                              + '3 such that quality levels 3, 4 and 5 anre included. Maximum is 5 such that only '
                              + 'quality level 5 is included.')
+    parser.add_argument('--min_flevel', type=int, default=_default_min_flevel,
+                        help='The minimum file quality level. Default is ' + str(_default_min_flevel) + '. An integer '
+                             + 'from 0 to 3.')
     parser.add_argument('--sst_l3u_path', default=regridding_constants.default_sst_l3u_path,
                         help='Path to the SST Level 3 Uncollated input data.')
     parser.add_argument('--sst_cci_climatology_path', default=regridding_constants.default_sst_cci_climatology_path,
