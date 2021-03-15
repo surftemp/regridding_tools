@@ -258,9 +258,6 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                 else:
                     sst_climatology_denominator = regridding_utilities.add_data(sst_climatology_denominator, data)
 
-                # Finalise the climatology regridding calculation
-                resampled_sst_climatology_data /= sst_climatology_denominator
-
                 for filename in filenames:
                     # Read in data
                     fl = cf.read(filename, aggregate=False)
@@ -312,6 +309,9 @@ class L3USSTRegridder(regridding_utilities.Regridder):
             # write out the file and we can continue.
             if (resampled_sst_data.mask == True).all():
                 continue
+
+            # Finalise the climatology regridding calculation
+            resampled_sst_climatology_data /= sst_climatology_denominator
 
             # Average the summed data
             resampled_sst_data /= sst_denominator
