@@ -74,19 +74,29 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr="", umax=0.35,
     diff = dsl3.sst - dsl4.sst
     yearly_diffs = diff.groupby('time.year')
     for year, yearly_diff in yearly_diffs:
-        fig, axs = plt.subplots(4, 3)
-        for i, time in enumerate(yearly_diff.time):
-            ax = axs.flat[i]
-            yearly_diff[i, :, :].plot(vmax=0.5, ax=ax)
+        yearly_diff = yearly_diff[:5]
+        time = yearly_diff.time
+        time_size = time.size
+        yearly_diff.plot(x='lon', y='lat',
+                         col=None if time_size <= 1 else 'time',
+                         col_wrap=None if time_size <= 4 else 4,
+                         vmax=0.5)
         plt.show()
 
-        fig, axs = plt.subplots(4, 3)
-        for i, time in enumerate(yearly_diff.time):
-            ax = axs.flat[i]
-            yearly_diff[i, :, :].plot.hist(bins=xbins, range=xrange, ax=ax)
-            coeff = add_gaussian(yearly_diff[i, :, :], ax, xbins, xrange)
-            plt.text(0.75, 0.8, '$a = {0:.3f}$\n$\mu = {1:.3f}$\n$\sigma = {2:.3f}$'.format(*coeff),
-                     transform=ax.transAxes)
+        fig, axs = plt.subplots((time_size - 1) // 4 + 1, time_size if time_size <= 4 else 4)
+        try:
+            axs = axs.flat
+        except AttributeError:
+            axs = [axs]
+        for i, ax in enumerate(axs):
+            if i < time_size:
+                yearly_diff[i, :, :].plot.hist(bins=xbins, range=xrange, ax=ax)
+                ax.title.set_text('time = ' + time[i].dt.strftime('%Y-%m-%dT%X').values)
+                coeff = add_gaussian(yearly_diff[i, :, :], ax, xbins, xrange)
+                plt.text(0.75, 0.8, '$a = {0:.3f}$\n$\mu = {1:.3f}$\n$\sigma = {2:.3f}$'.format(*coeff),
+                         transform=ax.transAxes)
+            else:
+                ax.set_axis_off()
         plt.show()
 
     # Compare the l3 and HadSST4
