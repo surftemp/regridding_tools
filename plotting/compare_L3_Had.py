@@ -5,6 +5,7 @@ Created on Tue Mar  9 11:14:46 2021
 
 @author: nn904972
 """
+from calendar import month_name
 import os
 
 import numpy as np
@@ -70,13 +71,23 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr="", umax=0.35,
     # Compare the  new regridded l3 and the previous l4
     # 0 --> a plot per month gather in annual plots
     # Histograms similarly, but on a common binsize/scale adn vertical axis for a given year
-    (dsl3.sst - dsl4.sst)[0, :, :].plot(vmax=0.5)
-    plt.show()
-    (dsl3.sst - dsl4.sst)[0, :, :].plot.hist(bins=xbins, range=xrange)
-    axs = plt.gca()
-    coeff = add_gaussian((dsl3.sst - dsl4.sst)[0, :, :], plt.gca(), xbins, xrange)
-    plt.text(0.75, 0.8, '$a = {0:.3f}$\n$\mu = {1:.3f}$\n$\sigma = {2:.3f}$'.format(*coeff), transform=axs.transAxes)
-    plt.show()
+    diff = dsl3.sst - dsl4.sst
+    yearly_diffs = diff.groupby('time.year')
+    for year, yearly_diff in yearly_diffs:
+        fig, axs = plt.subplots(4, 3)
+        for i, time in enumerate(yearly_diff.time):
+            ax = axs.flat[i]
+            yearly_diff[i, :, :].plot(vmax=0.5, ax=ax)
+        plt.show()
+
+        fig, axs = plt.subplots(4, 3)
+        for i, time in enumerate(yearly_diff.time):
+            ax = axs.flat[i]
+            yearly_diff[i, :, :].plot.hist(bins=xbins, range=xrange, ax=ax)
+            coeff = add_gaussian(yearly_diff[i, :, :], ax, xbins, xrange)
+            plt.text(0.75, 0.8, '$a = {0:.3f}$\n$\mu = {1:.3f}$\n$\sigma = {2:.3f}$'.format(*coeff),
+                     transform=ax.transAxes)
+        plt.show()
 
     # Compare the l3 and HadSST4
     (dsl3.sst - dsH.sst)[0, :, :].plot()
@@ -166,7 +177,7 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr="", umax=0.35,
     plt.show()
 
 
-def add_gaussian(data, axs, xbins, xrange):
+def add_gaussian(data, ax, xbins, xrange):
     """
     Add a simple Gaussian to a plot.
 
@@ -187,7 +198,7 @@ def add_gaussian(data, axs, xbins, xrange):
     try:
         p0 = [hist.max(), 0.0, 1.0]
         coef, vmat = scipy.optimize.curve_fit(_gauss, xval.astype(float), hist.astype(float), p0=p0)
-        axs.plot(xval, _gauss(xval, *coef), color='black', linestyle='--')
+        ax.plot(xval, _gauss(xval, *coef), color='black', linestyle='--')
     except RuntimeError:
         coef = None
 
