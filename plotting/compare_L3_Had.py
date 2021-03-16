@@ -73,8 +73,9 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr="", umax=0.35,
     (dsl3.sst - dsl4.sst)[0, :, :].plot(vmax=0.5)
     plt.show()
     (dsl3.sst - dsl4.sst)[0, :, :].plot.hist(bins=xbins, range=xrange)
-    add_gaussian((dsl3.sst - dsl4.sst)[0, :, :], plt.gca(), xbins, xrange)
-
+    axs = plt.gca()
+    coeff = add_gaussian((dsl3.sst - dsl4.sst)[0, :, :], plt.gca(), xbins, xrange)
+    plt.text(0.75, 0.8, '$a = {0:.3f}$\n$\mu = {1:.3f}$\n$\sigma = {2:.3f}$'.format(*coeff), transform=axs.transAxes)
     plt.show()
 
     # Compare the l3 and HadSST4
@@ -150,16 +151,18 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr="", umax=0.35,
     sd = (dsl3.sst - dsHg.sst).std(dim=('lat', 'lon'))
     dtu = dt + sd
     dtl = dt - sd
+    med = (dsl3.sst - dsHg.sst).median(dim=('lat', 'lon'))
     q1 = (dsl3.sst - dsHg.sst).quantile(0.01, dim=('lat', 'lon'))
     q99 = (dsl3.sst - dsHg.sst).quantile(0.99, dim=('lat', 'lon'))
 
-    dt.plot(color='black')
-    dtu.plot(color='red')
-    dtl.plot(color='red')
-    q1.plot(color='orange')
-    q99.plot(color='orange')
+    q1.plot(color='orange', label='Q01')
+    dtu.plot(color='red', label='+1 sig')
+    dt.plot(color='black', label='mean')
+    med.plot(color='darkgrey', label='median')
+    dtl.plot(color='red', label='-1 sig')
+    q99.plot(color='orange', label='Q99')
     plt.title(titlestr + "L3 - Had4, best in-situ mean +/- 1 sig")
-    plt.legend(['Q99', '+1 sig', 'mean', '-1 sig', 'Q01'])
+    plt.legend()
     plt.show()
 
 
@@ -177,7 +180,6 @@ def add_gaussian(data, axs, xbins, xrange):
         """Gaussian function"""
         return a * np.exp(-(x - mu) ** 2 / (2. * sigma ** 2))
 
-    # Change as required - these are just the defaults from the PVIR plots
     hist, edge = np.histogram(data, xbins, xrange)
     xval = (edge[:-1] + edge[1:]) / 2
     # Find the best fit Gaussian to the histogram data
