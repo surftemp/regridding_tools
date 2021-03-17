@@ -74,16 +74,27 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr="", umax=0.35,
     diff = dsl3.sst - dsl4.sst
     yearly_diffs = diff.groupby('time.year')
     for year, yearly_diff in yearly_diffs:
-        yearly_diff = yearly_diff[:5]
         time = yearly_diff.time
         time_size = time.size
-        yearly_diff.plot(x='lon', y='lat',
-                         col=None if time_size <= 1 else 'time',
-                         col_wrap=None if time_size <= 4 else 4,
-                         vmax=0.5)
+        nrows = (time_size - 1) // 4 + 1
+        ncols = time_size if time_size <= 4 else 4
+
+        fg = yearly_diff.plot(x='lon', y='lat', vmax=0.5,
+                              col=None if time_size <= 1 else 'time',
+                              col_wrap=None if time_size <= 4 else 4)
+        try:
+            fig = fg.fig
+        except AttributeError:
+            pass
+        else:
+            fig.set_tight_layout({'rect': (0, 0, 0.8, 1)})
+
+        plt.suptitle('Maps')
+        plt.savefig(os.path.join(outPicPath, str(year) + '_l3_vs_l4_map.pdf'))
         plt.show()
 
-        fig, axs = plt.subplots((time_size - 1) // 4 + 1, time_size if time_size <= 4 else 4)
+        fig, axs = plt.subplots(nrows, ncols, figsize=(6.4 * ncols, 4.8 * nrows),
+                                sharex=(time_size > ncols), sharey=(time_size > 1))
         try:
             axs = axs.flat
         except AttributeError:
@@ -97,6 +108,8 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr="", umax=0.35,
                          transform=ax.transAxes)
             else:
                 ax.set_axis_off()
+        plt.suptitle('Histograms')
+        plt.savefig(os.path.join(outPicPath, str(year) + '_l3_vs_l4_hist.pdf'))
         plt.show()
 
     # Compare the l3 and HadSST4
