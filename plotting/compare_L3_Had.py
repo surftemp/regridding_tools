@@ -1,29 +1,12 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Mar  9 11:14:46 2021
-
-@author: nn904972
-"""
-from calendar import month_name
+import argparse
 import os
 
+import cartopy.crs as ccrs
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy.optimize
 import xarray as xr
-import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-
-# Define paths to data
-l3path = "/Users/charles/Data/l3u_regrid_test/CDR2.1"
-hadfiles = ["/Users/charles/Data/HadSST4/HadSST.4.0.0.0_actuals_median.nc",
-            "//Users/charles/Data/HadSST4/HadSST.4.0.0.0_total_uncertainty.nc"]
-l4path = "/Users/charles/Data/monthly_regridded_ssts_5_degrees"
-outPicPath = "/Users/charles/Data/HadSSTComps/Plots"
-
-titlestr = 'N07'
-
 
 def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35, xbins=80, xrange=(-2.5, 2.5)):
     """
@@ -233,4 +216,18 @@ def add_gaussian(data, ax, xbins, xrange):
 
 
 if __name__ == '__main__':
-    compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr=titlestr)
+    parser = argparse.ArgumentParser(description='Create plots comparing regridded L3U files to regridded L4 and HadSST')
+    parser.add_argument('l3path', help='Path to regridded L3U files.')
+    parser.add_argument('l4path', help='Path to regridded L4 files.')
+    parser.add_argument('outPicPath', help='Path to create output plots in.')
+    parser.add_argument('--hadfile', help='Path to HadSST file with actuals and median.',
+                        default='/gws/nopw/j04/esacci_sst/validation/HadSST4/HadSST.4.0.0.0_actuals_median.nc')
+    parser.add_argument('--hadfileuncert', help='Path to HadSST file with total uncertainty.',
+                        default='/gws/nopw/j04/esacci_sst/validation/HadSST4/HadSST.4.0.0.0_total_uncertainty.nc')
+    parser.add_argument('--titlestr', help='A title string to prefix to the titles of the plots.', default='')
+    parser.add_argument('--umax', help='Maximum uncertainty to include in best HadSST data. Default is 0.35',
+                        type=float, default=0.35)
+    args = parser.parse_args()
+
+    compare_L3_Had([args.hadfile, args.hadfileuncert], args.l3path, args.l4path, args.outPicPath,
+                   titlestr=args.titlestr, umax=args.umax)
