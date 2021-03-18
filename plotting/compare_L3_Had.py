@@ -162,20 +162,20 @@ def create_plots(diff, titlestr, filestr, outPicPath, xbins, xrange, vmin=None, 
         plt.savefig(os.path.join(outPicPath, filestr + '_hists_' + str(year) + '.pdf'))
         plt.close()
 
-        # Whole series plots, all data
-        p = yearly_diff.mean(dim='time').plot(vmin=vmin, vmax=vmax, transform=ccrs.PlateCarree(),
-                                              subplot_kws=dict(projection=ccrs.PlateCarree()))
-        p.axes.coastlines()
-        plt.suptitle(titlestr + 'Annual Mean Map for ' + str(year))
-        plt.savefig(os.path.join(outPicPath, filestr + '_mean_map_' + str(year) + '.pdf'))
-        plt.close()
+    # Whole series plots, all data
+    p = diff.mean(dim='time').plot(vmin=vmin, vmax=vmax, transform=ccrs.PlateCarree(),
+                                          subplot_kws=dict(projection=ccrs.PlateCarree()))
+    p.axes.coastlines()
+    plt.suptitle(titlestr + 'Mean Map')
+    plt.savefig(os.path.join(outPicPath, filestr + '_mean_map.pdf'))
+    plt.close()
 
-        yearly_diff.plot.hist(bins=xbins, range=xrange)
-        coeff = add_gaussian(yearly_diff, plt.gca(), xbins, xrange)
-        plt.text(0.75, 0.8, '$a = {0:.3f}$\n$\mu = {1:.3f}$\n$\sigma = {2:.3f}$'.format(*coeff), transform=ax.transAxes)
-        plt.suptitle(titlestr + 'Whole Series Histogram for ' + str(year))
-        plt.savefig(os.path.join(outPicPath, filestr + '_whole_series_hist_' + str(year) + '.pdf'))
-        plt.close()
+    diff.plot.hist(bins=xbins, range=xrange)
+    coeff = add_gaussian(diff, plt.gca(), xbins, xrange)
+    plt.text(0.75, 0.8, '$a = {0:.3f}$\n$\mu = {1:.3f}$\n$\sigma = {2:.3f}$'.format(*coeff), transform=ax.transAxes)
+    plt.suptitle(titlestr + 'Whole Series Histogram')
+    plt.savefig(os.path.join(outPicPath, filestr + '_whole_series_hist.pdf'))
+    plt.close()
 
     # Time series of statistics
     dt = diff.mean(dim=('lat', 'lon'))
