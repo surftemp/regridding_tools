@@ -25,7 +25,7 @@ outPicPath = "/Users/charles/Data/HadSSTComps/Plots"
 titlestr = 'N07'
 
 
-def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr="", umax=0.35, xbins=80, xrange=(-4, 4)):
+def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr="", umax=0.35, xbins=80, xrange=(-2.5, 2.5)):
     """
     Compare regridded L3U data to HadSST.
 
@@ -85,30 +85,12 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr="", umax=0.35,
     dsl3 = dsl3.where(dsl4.sea_fraction > 0.99).where(dsl4.sea_ice_fraction < 0.01)
 
     # Compare the  new regridded l3 and the previous l4
-    # 0 --> a plot per month gather in annual plots
-    # Histograms similarly, but on a common binsize/scale adn vertical axis for a given year
     diff = dsl3.sst - dsl4.sst
-    plot_maps_and_hists(diff, titlestr + ' L3 - L4', 'l3-l4', outPicPath,
-                        vmax=0.5, xbins=xbins, xrange=xrange)
+    plot_maps_and_hists(diff, titlestr + ' L3 - L4', 'l3-l4', outPicPath, xbins, xrange, vmax=0.5)
 
     # Compare the l3 and HadSST4
     diff = dsl3.sst - dsH.sst
-    plot_maps_and_hists(diff, titlestr + ' L3 - HadSST', 'l3-had', outPicPath,
-                        xbins=xbins, xrange=xrange)
-
-    # Whole series plots, all data
-    # Compare the  new regridded l3 and the previous l4
-    (dsl3.sst - dsl4.sst).mean(dim='time').plot(vmax=1.0)
-    plt.show()
-    (dsl3.sst - dsl4.sst).plot.hist(bins=xbins, range=xrange)
-    add_gaussian(dsl3.sst - dsl4.sst, plt.gca(), xbins, xrange)
-    plt.show()
-    # Compare the  new regridded l3 and the previous Had4
-    (dsl3.sst - dsH.sst).mean(dim='time').plot(vmax=1.0)
-    plt.show()
-    (dsl3.sst - dsH.sst).plot.hist(bins=xbins, range=xrange)
-    add_gaussian(dsl3.sst - dsH.sst, plt.gca(), xbins, xrange)
-    plt.show()
+    plot_maps_and_hists(diff, titlestr + ' L3 - HadSST', 'l3-had', outPicPath, xbins, xrange)
 
     # Timeseries of statistics
     # First, using all common data
@@ -139,16 +121,7 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr="", umax=0.35,
 
     # Compare the l3 and HadSST4 best data in HadSST4
     diff = dsl3.sst - dsHg.sst
-    plot_maps_and_hists(diff, titlestr + ' L3 - HadSST Best Data', 'l3-had_best', outPicPath,
-                        vmax=1.0, xbins=xbins, xrange=xrange)
-
-    # Whole series plots, best Had data
-    # Compare the  new regridded l3 and the previous Had4
-    (dsl3.sst - dsHg.sst).mean(dim='time').plot(vmax=1.0)
-    plt.show()
-    (dsl3.sst - dsHg.sst).plot.hist(bins=xbins, range=xrange)
-    add_gaussian(dsl3.sst - dsHg.sst, plt.gca(), xbins, xrange)
-    plt.show()
+    plot_maps_and_hists(diff, titlestr + ' L3 - HadSST Best Data', 'l3-had_best', outPicPath, xbins, xrange, vmax=1.0)
 
     # using best data
     # add 1% and 99% quantiles, and median
@@ -171,7 +144,7 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr="", umax=0.35,
     plt.show()
 
 
-def plot_maps_and_hists(diff, titlestr, filestr, outPicPath, vmin=None, vmax=None, xbins=80, xrange=(-4, 4)):
+def plot_maps_and_hists(diff, titlestr, filestr, outPicPath, xbins, xrange, vmin=None, vmax=None):
     """
     Plot maps and histograms.
 
@@ -225,6 +198,21 @@ def plot_maps_and_hists(diff, titlestr, filestr, outPicPath, vmin=None, vmax=Non
                 ax.set_axis_off()
         plt.suptitle(titlestr + ' Histograms for ' + str(year))
         plt.savefig(os.path.join(outPicPath, str(year) + '_' + filestr + '_hists.pdf'))
+        plt.close()
+
+        # Whole series plots, all data
+        p = yearly_diff.mean(dim='time').plot(vmin=vmin, vmax=vmax, transform=ccrs.PlateCarree(),
+                                              subplot_kws=dict(projection=ccrs.PlateCarree()))
+        p.axes.coastlines()
+        plt.suptitle(titlestr + ' Annual Mean Map for ' + str(year))
+        plt.savefig(os.path.join(outPicPath, str(year) + '_' + filestr + '_mean_map.pdf'))
+        plt.close()
+
+        yearly_diff.plot.hist(bins=xbins, range=xrange)
+        coeff = add_gaussian(yearly_diff, plt.gca(), xbins, xrange)
+        plt.text(0.75, 0.8, '$a = {0:.3f}$\n$\mu = {1:.3f}$\n$\sigma = {2:.3f}$'.format(*coeff), transform=ax.transAxes)
+        plt.suptitle(titlestr + ' Whole Series Histogram for ' + str(year))
+        plt.savefig(os.path.join(outPicPath, str(year) + '_' + filestr + '_whole_series_hist.pdf'))
         plt.close()
 
 
