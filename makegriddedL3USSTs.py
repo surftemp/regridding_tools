@@ -259,50 +259,50 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                     sst_climatology_denominator = regridding_utilities.add_data(sst_climatology_denominator, data)
 
                 for filename in filenames:
-                    # Read in data
-                    fl = cf.read(filename, aggregate=False)
-
-                    # Select the SST and create longitude and latitude bounds if necessary
-                    sst = fl.select_by_property(standard_name='sea_water_temperature')[0]
-                    regridding_utilities.create_lonlat_bounds(sst)
-
-                    # Check the file quality level
-                    if sst.get_property('file_quality_level') < self.min_flevel:
-                        fl.close()
-                        continue
-
-                    # Select the quality level
                     try:
+                        # Read in data
+                        fl = cf.read(filename, aggregate=False)
+
+                        # Select the SST and create longitude and latitude bounds if necessary
+                        sst = fl.select_by_property(standard_name='sea_water_temperature')[0]
+                        regridding_utilities.create_lonlat_bounds(sst)
+
+                        # Check the file quality level
+                        if sst.get_property('file_quality_level') < self.min_flevel:
+                            fl.close()
+                            continue
+
+                        # Select the quality level
                         qlevel = fl.select_by_ncvar('quality_level')[0]
-                    except IndexError as e:
-                        raise IndexError('Error occurred in file ' + filename + ': ' + str(e))
 
-                    # Calculate the regridded SST anomaly
-                    sst -= sst_climatology
-                    data = self.spatially_resample_data(sst.where(qlevel < self.min_qlevel, cf.masked), weights=True)
-                    if resampled_sst_data is None:
-                        resampled_sst_data = data
-                    else:
-                        resampled_sst_data = regridding_utilities.add_data(resampled_sst_data, data)
+                        # Calculate the regridded SST anomaly
+                        sst -= sst_climatology
+                        data = self.spatially_resample_data(sst.where(qlevel < self.min_qlevel, cf.masked), weights=True)
+                        if resampled_sst_data is None:
+                            resampled_sst_data = data
+                        else:
+                            resampled_sst_data = regridding_utilities.add_data(resampled_sst_data, data)
 
-                    # Calculate the denominator for averaging
-                    data = self.spatially_resample_data(sst.where(qlevel < self.min_qlevel, cf.masked, 1.0), weights=True)
-                    if sst_denominator is None:
-                        sst_denominator = data
-                    else:
-                        sst_denominator = regridding_utilities.add_data(sst_denominator, data)
+                        # Calculate the denominator for averaging
+                        data = self.spatially_resample_data(sst.where(qlevel < self.min_qlevel, cf.masked, 1.0), weights=True)
+                        if sst_denominator is None:
+                            sst_denominator = data
+                        else:
+                            sst_denominator = regridding_utilities.add_data(sst_denominator, data)
 
-                    # Calculate the number of observations used in each target cell
-                    f_tmp = sst.where(qlevel < self.min_qlevel, 0, 1)
-                    f_tmp.data.filled(0, inplace=True)
-                    f_tmp.dtype = np.int32
-                    data = self.spatially_resample_data(f_tmp)
-                    if n_data is None:
-                        n_data = data
-                    else:
-                        n_data = regridding_utilities.add_data(n_data, data)
+                        # Calculate the number of observations used in each target cell
+                        f_tmp = sst.where(qlevel < self.min_qlevel, 0, 1)
+                        f_tmp.data.filled(0, inplace=True)
+                        f_tmp.dtype = np.int32
+                        data = self.spatially_resample_data(f_tmp)
+                        if n_data is None:
+                            n_data = data
+                        else:
+                            n_data = regridding_utilities.add_data(n_data, data)
 
-                    fl.close()
+                        fl.close()
+                    except Exception as e:
+                        raise Exception('An error occurred when processing file: ' + filename) from e
 
             # If all the files were below the minimum file quality level then the resampled_sst_data will be None and
             # we can continue.
