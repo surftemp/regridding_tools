@@ -268,13 +268,14 @@ class L3USSTRegridder(regridding_utilities.Regridder):
 
                     # Check the file quality level
                     if sst.get_property('file_quality_level') < self.min_flevel:
+                        fl.close()
                         continue
 
                     # Select the quality level
                     try:
                         qlevel = fl.select_by_ncvar('quality_level')[0]
                     except IndexError as e:
-                        raise IndexError('Error occurred in file ' + filename + ': ' +str(e))
+                        raise IndexError('Error occurred in file ' + filename + ': ' + str(e))
 
                     # Calculate the regridded SST anomaly
                     sst -= sst_climatology
