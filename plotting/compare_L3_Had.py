@@ -227,7 +227,13 @@ if __name__ == '__main__':
     parser.add_argument('--titlestr', help='A title string to prefix to the titles of the plots.', default='')
     parser.add_argument('--umax', help='Maximum uncertainty to include in best HadSST data. Default is 0.35',
                         type=float, default=0.35)
+    parser.add_argument('--xbins', help='Number of x bins to use for histograms. Default is 80.',
+                        type=int, default=80)
+    parser.add_argument('--xmin', help='Minimum of x range for histograms. Default is -2.5.',
+                        type=float, default=-2.5)
+    parser.add_argument('--xmax', help='Maximum of x range for histograms. Default is 2.5.',
+                        type=float, default=2.5)
     args = parser.parse_args()
 
-    compare_L3_Had([args.hadfile, args.hadfileuncert], args.l3path, args.l4path, args.outPicPath,
-                   titlestr=args.titlestr, umax=args.umax)
+    compare_L3_Had((args.hadfile, args.hadfileuncert), args.l3path, args.l4path, args.outPicPath,
+                   titlestr=args.titlestr, umax=args.umax, xbins=args.xbins, xrange=(args.xmin, args.xmax))
