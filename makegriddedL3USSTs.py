@@ -273,7 +273,10 @@ class L3USSTRegridder(regridding_utilities.Regridder):
                             continue
 
                         # Select the quality level
-                        qlevel = fl.select_by_ncvar('quality_level')[0]
+                        try:
+                            qlevel = fl.select_by_ncvar('quality_level')[0]
+                        except IndexError:
+                            qlevel = sst.field_ancillary(identity='quality_flags')
 
                         # Calculate the regridded SST anomaly
                         sst -= sst_climatology
@@ -302,7 +305,7 @@ class L3USSTRegridder(regridding_utilities.Regridder):
 
                         fl.close()
                     except Exception as e:
-                        raise Exception('An error occurred when processing file: ' + filename) from e
+                        raise Exception('An exception occurred when processing file: ' + filename) from e
 
             # If all the files were below the minimum file quality level then the resampled_sst_data will be None and
             # we can continue.
