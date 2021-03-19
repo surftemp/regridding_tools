@@ -8,7 +8,8 @@ import numpy as np
 import scipy.optimize
 import xarray as xr
 
-def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35, xbins=80, xrange=(-2.5, 2.5)):
+def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35, xbins=80, xrange_had=(-2.5, 2.5),
+                   xrange_l4=(-1.25, 1.25), vmax_had=1.0, vmax_l4=0.5):
     """
     Compare regridded L3U data to L4 and HadSST.
 
@@ -19,7 +20,10 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
     :param titlestr:
     :param umax:
     :param xbins:
-    :param xrange:
+    :param xrange_had:
+    :param xrange_l4:
+    :param vmax_had:
+    :param vmax_l4:
     :return:
     """
     titlestr = format_titlestr(titlestr)
@@ -46,6 +50,10 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
     dsHu = dsHu.rename({'latitude_bnds': 'lat_bnds', 'longitude_bnds': 'lon_bnds', 'tos_unc': 'usst'})
     dsHu = dsHu.where(dsHu.usst < 9e36)
 
+    # Truncate the L3 to be within the same time range as the L4
+    dsl3 = dsl3.where(dsl3['time'] >= dsl4['time_bnds'][0, 0], drop=True)
+    dsl3 = dsl3.where(dsl3['time'] <= dsl4['time_bnds'][-1, 1], drop=True)
+
     # Truncate the dsH record to the same months as the L3, then equalise the times
     dsH = dsH.where(dsH['time'] >= dsl3['time_bnds'][0, 0], drop=True)
     dsH = dsH.where(dsH['time'] <= dsl3['time_bnds'][-1, 1], drop=True)
@@ -68,11 +76,11 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
 
     # Compare the  new regridded l3 and the previous l4
     diff = dsl3.sst - dsl4.sst
-    create_plots(diff, titlestr + 'L3 - L4', 'l3-l4', outPicPath, xbins, xrange, vmax=0.5)
+    create_plots(diff, titlestr + 'L3 - L4', 'l3-l4', outPicPath, xbins, xrange_l4, vmax=vmax_l4)
 
     # Compare the l3 and HadSST4
     diff = dsl3.sst - dsH.sst
-    create_plots(diff, titlestr + 'L3 - HadSST', 'l3-had ', outPicPath, xbins, xrange)
+    create_plots(diff, titlestr + 'L3 - HadSST', 'l3-had ', outPicPath, xbins, xrange_had, vmax=vmax_had)
 
     # Then the same things using only the low-uncertainty data in HadSST4
     # Mask the high uncertainty HadSST4
@@ -81,7 +89,7 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
 
     # Compare the l3 and HadSST4 best data in HadSST4
     diff = dsl3.sst - dsHg.sst
-    create_plots(diff, titlestr + 'L3 - HadSST Best Data', 'l3-had_best', outPicPath, xbins, xrange, vmax=1.0)
+    create_plots(diff, titlestr + 'L3 - HadSST Best Data', 'l3-had_best', outPicPath, xbins, xrange_had, vmax=vmax_had)
 
 
 def create_plots(diff, titlestr, filestr, outPicPath, xbins, xrange, vmin=None, vmax=None):
@@ -136,8 +144,8 @@ def create_plots(diff, titlestr, filestr, outPicPath, xbins, xrange, vmin=None, 
             if i < time_size:
                 yearly_diff[i, :, :].plot.hist(bins=xbins, range=xrange, ax=ax)
                 ax.title.set_text('time = ' + time[i].dt.strftime('%Y-%m-%dT%X').values)
-                coeff = add_gaussian(yearly_diff[i, :, :], ax, xbins, xrange)
-                plt.text(0.75, 0.8, '$a = {0:.3f}$\n$\mu = {1:.3f}$\n$\sigma = {2:.3f}$'.format(*coeff),
+                coef = add_gaussian(yearly_diff[i, :, :], ax, xbins, xrange)
+                plt.text(0.75, 0.8, '$a = {0:.3f}$\n$\mu = {1:.3f}$\n$\sigma = {2:.3f}$'.format(*coef),
                          transform=ax.transAxes)
             else:
                 ax.set_axis_off()
@@ -154,8 +162,8 @@ def create_plots(diff, titlestr, filestr, outPicPath, xbins, xrange, vmin=None, 
     plt.close()
 
     diff.plot.hist(bins=xbins, range=xrange)
-    coeff = add_gaussian(diff, plt.gca(), xbins, xrange)
-    plt.text(0.75, 0.8, '$a = {0:.3f}$\n$\mu = {1:.3f}$\n$\sigma = {2:.3f}$'.format(*coeff), transform=ax.transAxes)
+    coef = add_gaussian(diff, plt.gca(), xbins, xrange)
+    plt.text(0.75, 0.8, '$a = {0:.3f}$\n$\mu = {1:.3f}$\n$\sigma = {2:.3f}$'.format(*coef), transform=ax.transAxes)
     plt.suptitle(titlestr + 'Whole Series Histogram')
     plt.savefig(os.path.join(outPicPath, filestr + '_whole_series_hist.pdf'))
     plt.close()
@@ -175,7 +183,7 @@ def create_plots(diff, titlestr, filestr, outPicPath, xbins, xrange, vmin=None, 
     med.plot(color='darkgrey', label='median')
     dtl.plot(color='red', label='-1 sig')
     q99.plot(color='orange', label='Q99')
-    plt.title(titlestr + 'Mean and Median with +/- 1 Sig, 1st and 99th Percentile')
+    plt.title(titlestr + 'Mean and Median\nwith +/- 1 Sig, 1st and 99th Percentile')
     plt.legend()
     plt.savefig(os.path.join(outPicPath, filestr + '_time_series.pdf'))
     plt.close()
@@ -229,11 +237,20 @@ if __name__ == '__main__':
                         type=float, default=0.35)
     parser.add_argument('--xbins', help='Number of x bins to use for histograms. Default is 80.',
                         type=int, default=80)
-    parser.add_argument('--xmin', help='Minimum of x range for histograms. Default is -2.5.',
+    parser.add_argument('--xmin_had', help='Minimum of x range for HadSST histograms. Default is -2.5.',
                         type=float, default=-2.5)
-    parser.add_argument('--xmax', help='Maximum of x range for histograms. Default is 2.5.',
+    parser.add_argument('--xmax_had', help='Maximum of x range for HadSST histograms. Default is 2.5.',
                         type=float, default=2.5)
+    parser.add_argument('--xmin_l4', help='Minimum of x range for L4 histograms. Default is -1.25.',
+                        type=float, default=-1.25)
+    parser.add_argument('--xmax_l4', help='Maximum of x range for L4 histograms. Default is 1.25.',
+                        type=float, default=1.25)
+    parser.add_argument('--vmax_had', help='Maximum of colorscale for HadSST maps. Default is 1.0 degrees C.',
+                        type=float, default=1.0)
+    parser.add_argument('--vmax_l4', help='Maximum of colorscale for L4 maps. Default is 0.5 degrees C.',
+                        type=float, default=0.5)
     args = parser.parse_args()
 
     compare_L3_Had((args.hadfile, args.hadfileuncert), args.l3path, args.l4path, args.outPicPath,
-                   titlestr=args.titlestr, umax=args.umax, xbins=args.xbins, xrange=(args.xmin, args.xmax))
+                   titlestr=args.titlestr, umax=args.umax, xbins=args.xbins, xrange_had=(args.xmin_had, args.xmax_had),
+                   xrange_l4=(args.xmin_l4, args.xmax_l4), vmax_had=args.vmax_had, vmax_l4=args.vmax_l4)
