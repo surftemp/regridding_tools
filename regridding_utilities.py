@@ -414,7 +414,7 @@ class Regridder(object):
         g = first_field.copy(data=False)
 
         # Remove field ancillaries
-        for fa in g.field_ancilliaries:
+        for fa in g.field_ancillaries:
             g.del_construct(fa)
 
         # Replace the longitudes and latitudes with the resampled ones
