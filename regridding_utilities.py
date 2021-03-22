@@ -413,6 +413,10 @@ class Regridder(object):
         # Copy the field without the data
         g = first_field.copy(data=False)
 
+        # Remove field ancillaries
+        for fa in g.field_ancilliaries:
+            g.del_construct(fa)
+
         # Replace the longitudes and latitudes with the resampled ones
         lon_key = g.dimension_coordinate('X', key=True)
         lat_key = g.dimension_coordinate('Y', key=True)
