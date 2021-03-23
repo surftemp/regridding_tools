@@ -496,9 +496,13 @@ class Regridder(object):
         # Insert the data in the new field
         g.set_data(resampled_data, axes=(time_axis, lat_axis, lon_axis))
 
-        # Remove valid_min and valid_max
+        # Remove valid_min and valid_max and valid_range if it exists
         del g.valid_min
         del g.valid_max
+        try:
+            del g.valid_range
+        except AttributeError:
+            pass
 
         # Update time related metadata
         g.set_property('stop_time', last_field.get_property('stop_time'))
