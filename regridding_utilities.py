@@ -214,8 +214,20 @@ class Regridder(object):
         resampled_lon = lon.copy(data=False)
         resampled_lat = lat.copy(data=False)
 
+        try:
+            del resampled_lon.valid_range
+            del resampled_lat.valid_range
+        except AttributeError:
+            pass
+
         resampled_lon_bounds = lon.bounds.copy(data=False)
         resampled_lat_bounds = lat.bounds.copy(data=False)
+
+        try:
+            del resampled_lon_bounds.valid_range
+            del resampled_lat_bounds.valid_range
+        except AttributeError:
+            pass
 
         resampled_lon_bounds.set_data(cf.Data(resampled_lon_bounds_array, units=lon_units, dtype=lon_dtype))
         resampled_lat_bounds.set_data(cf.Data(resampled_lat_bounds_array, units=lat_units, dtype=lat_dtype))
