@@ -80,7 +80,7 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
 
     # Compare the l3 and HadSST4
     diff = dsl3.sst - dsH.sst
-    create_plots(diff, titlestr + 'L3 - HadSST', 'l3-had ', outPicPath, xbins, xrange_had, vmax=vmax_had)
+    create_plots(diff, titlestr + 'L3 - HadSST', 'l3-had', outPicPath, xbins, xrange_had, vmax=vmax_had)
 
     # Then the same things using only the low-uncertainty data in HadSST4
     # Mask the high uncertainty HadSST4
