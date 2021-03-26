@@ -50,45 +50,59 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
     dsHu = dsHu.rename({'latitude_bnds': 'lat_bnds', 'longitude_bnds': 'lon_bnds', 'tos_unc': 'usst'})
     dsHu = dsHu.where(dsHu.usst < 9e36)
 
-    # Truncate the L3 to be within the same time range as the L4
-    dsl3 = dsl3.where(dsl3['time'] >= dsl4['time_bnds'][0, 0], drop=True)
-    dsl3 = dsl3.where(dsl3['time'] <= dsl4['time_bnds'][-1, 1], drop=True)
-
-    # Truncate the dsH record to the same months as the L3, then equalise the times
+    # Truncate the dsH record to the same time period as the L3
     dsH = dsH.where(dsH['time'] >= dsl3['time_bnds'][0, 0], drop=True)
     dsH = dsH.where(dsH['time'] <= dsl3['time_bnds'][-1, 1], drop=True)
-    dsH['time'] = dsl3['time']
 
     dsHu = dsHu.where(dsHu['time'] >= dsl3['time_bnds'][0, 0], drop=True)
     dsHu = dsHu.where(dsHu['time'] <= dsl3['time_bnds'][-1, 1], drop=True)
-    dsHu['time'] = dsl3['time']
 
-    # Truncate the L4 record to the same months as the L3
+    # Truncate the L4 record to the same time period as the L3
     dsl4 = dsl4.where(dsl4['time'] >= dsl3['time_bnds'][0, 0], drop=True)
     dsl4 = dsl4.where(dsl4['time'] <= dsl3['time_bnds'][-1, 1], drop=True)
 
-    # Mask all the datasets to effectively completely ocean cells
+    # Subset the dsH SST record to be on the same months as the L3 and then equalise the times
+    dsl3_subset = [(year, month) in zip(dsl3.time.dt.year, dsl3.time.dt.month)
+                   for year, month in list(zip(dsH.time.dt.year, dsH.time.dt.month))]
+    dsH_sst = dsH.sst[dsl3_subset, :, :]
+    dsH_subset = [(year, month) in zip(dsH_sst.time.dt.year, dsH_sst.time.dt.month)
+                  for year, month in list(zip(dsl3.time.dt.year, dsl3.time.dt.month))]
+    dsl3_sst = dsl3.sst[dsH_subset, :, :]
+    dsH_sst['time'] = dsl3_sst.time
+    dsHu_usst = dsHu.usst[dsl3_subset, :, :]
+    dsHu_usst['time'] = dsl3_sst.time
+
+    # Subset the L4 SST, sea fraction and sea ice fraction record to be on the same months as the L3
+    subset = [(year, month) in zip(dsl3.time.dt.year, dsl3.time.dt.month)
+              and (year, month) in zip(dsH.time.dt.year, dsH.time.dt.month)
+              for year, month in list(zip(dsl4.time.dt.year, dsl4.time.dt.month))]
+    dsl4_sst = dsl4.sst[subset, :, :]
+    dsl4_sf = dsl4.sea_fraction[subset, :, :]
+    dsl4_sif = dsl4.sea_ice_fraction[subset, :, :]
+    assert (dsl4_sst.time == dsl3_sst.time).all()
+
+    # Mask all the SST datasets to effectively completely ocean cells
     # To avoid small-area low-N effects
-    dsl4 = dsl4.where(dsl4.sea_fraction > 0.99).where(dsl4.sea_ice_fraction < 0.01)
-    dsH = dsH.where(dsl4.sea_fraction > 0.99).where(dsl4.sea_ice_fraction < 0.01)
-    dsHu = dsHu.where(dsl4.sea_fraction > 0.99).where(dsl4.sea_ice_fraction < 0.01)
-    dsl3 = dsl3.where(dsl4.sea_fraction > 0.99).where(dsl4.sea_ice_fraction < 0.01)
+    dsl4_sst = dsl4_sst.where(dsl4_sf > 0.99).where(dsl4_sif < 0.01)
+    dsH_sst = dsH_sst.where(dsl4_sf > 0.99).where(dsl4_sif < 0.01)
+    dsHu_usst = dsHu_usst.where(dsl4_sf > 0.99).where(dsl4_sif < 0.01)
+    dsl3_sst = dsl3_sst.where(dsl4_sf > 0.99).where(dsl4_sif < 0.01)
 
     # Compare the  new regridded l3 and the previous l4
-    diff = dsl3.sst - dsl4.sst
+    diff = dsl3_sst - dsl4_sst
     create_plots(diff, titlestr + 'L3 - L4', 'l3-l4', outPicPath, xbins, xrange_l4, vmax=vmax_l4)
 
     # Compare the l3 and HadSST4
-    diff = dsl3.sst - dsH.sst
+    diff = dsl3_sst - dsH_sst
     create_plots(diff, titlestr + 'L3 - HadSST', 'l3-had', outPicPath, xbins, xrange_had, vmax=vmax_had)
 
     # Then the same things using only the low-uncertainty data in HadSST4
     # Mask the high uncertainty HadSST4
-    dsHg = dsH.where(dsHu.usst < umax)
-    dsHug = dsHu.where(dsHu.usst < umax)
+    dsHg_sst = dsH_sst.where(dsHu_usst < umax)
+    dsHug_usst = dsHu_usst.where(dsHu_usst < umax)
 
     # Compare the l3 and HadSST4 best data in HadSST4
-    diff = dsl3.sst - dsHg.sst
+    diff = dsl3_sst - dsHg_sst
     create_plots(diff, titlestr + 'L3 - HadSST Best Data', 'l3-had_best', outPicPath, xbins, xrange_had, vmax=vmax_had)
 
 
