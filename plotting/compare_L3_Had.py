@@ -68,9 +68,9 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
     dsH_subset = [(year, month) in zip(dsH_sst.time.dt.year, dsH_sst.time.dt.month)
                   for year, month in list(zip(dsl3.time.dt.year, dsl3.time.dt.month))]
     dsl3_sst = dsl3.sst[dsH_subset, :, :]
-    dsH_sst['time'] = dsl3_sst.time
+    dsH_sst['time'] = dsl3_sst['time']
     dsHu_usst = dsHu.usst[dsl3_subset, :, :]
-    dsHu_usst['time'] = dsl3_sst.time
+    dsHu_usst['time'] = dsl3_sst['time']
 
     # Subset the L4 SST, sea fraction and sea ice fraction record to be on the same months as the L3
     subset = [(year, month) in zip(dsl3.time.dt.year, dsl3.time.dt.month)
@@ -133,6 +133,12 @@ def create_plots(diff, titlestr, filestr, outPicPath, xbins, xrange, vmin=None, 
             p = yearly_diff.plot(vmin=vmin, vmax=vmax,
                                  transform=ccrs.PlateCarree(), subplot_kws=dict(projection=ccrs.PlateCarree()))
             p.axes.coastlines()
+        elif time_size == 2:
+            fig, axs = plt.subplots(1, 2, figsize=(6.4 * 2, 4.8 * 1), sharey=True,
+                                    subplot_kw=dict(projection=ccrs.PlateCarree()))
+            for i, ax in enumerate(axs):
+                yearly_diff[i, :, :].plot(vmin=vmin, vmax=vmax, ax=ax, transform=ccrs.PlateCarree())
+                ax.coastlines()
         else:
             p = yearly_diff.plot(x='lon', y='lat', col='time', col_wrap=None if time_size <= 4 else 4,
                                  vmin=vmin, vmax=vmax,
