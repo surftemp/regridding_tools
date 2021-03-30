@@ -9,8 +9,8 @@ import numpy as np
 import scipy.optimize
 import xarray as xr
 
-def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35, xbins=80, xrange_had=(-2.5, 2.5),
-                   xrange_l4=(-1.25, 1.25), vmax=0.8):
+def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35, xbins=80, xrange=(-1.75, 1.75),
+                   vmax=0.8):
     """
     Compare regridded L3U data to L4 and HadSST.
 
@@ -90,11 +90,11 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
 
     # Compare the  new regridded l3 and the previous l4
     diff_l4 = dsl3_sst - dsl4_sst
-    create_whole_series_plots(diff_l4, titlestr + 'L3 - L4', 'l3-l4', outPicPath, xbins, xrange_l4, vmax=vmax)
+    create_whole_series_plots(diff_l4, titlestr + 'L3 - L4', 'l3-l4', outPicPath, xbins, xrange, vmax=vmax)
 
     # Compare the l3 and HadSST4
     diff_had = dsl3_sst - dsH_sst
-    create_whole_series_plots(diff_had, titlestr + 'L3 - HadSST', 'l3-had', outPicPath, xbins, xrange_had, vmax=vmax)
+    create_whole_series_plots(diff_had, titlestr + 'L3 - HadSST', 'l3-had', outPicPath, xbins, xrange, vmax=vmax)
 
     # Then the same things using only the low-uncertainty data in HadSST4
     # Mask the high uncertainty HadSST4
@@ -104,7 +104,7 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
     # Compare the l3 and HadSST4 best data in HadSST4
     diff_had_best = dsl3_sst - dsHg_sst
     create_whole_series_plots(diff_had_best, titlestr + 'L3 - HadSST Best Data', 'l3-had_best', outPicPath, xbins,
-                              xrange_had, vmax=vmax)
+                              xrange, vmax=vmax)
 
     # Create monthly plots
     for t1, t2, t3 in zip(diff_l4.groupby('time.year'),
@@ -120,14 +120,16 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
         monthly_diffs_had = get_monthly_diffs(yearly_diff_had)
         monthly_diffs_had_best = get_monthly_diffs(yearly_diff_had_best)
         for month in range(1, 12, n_plots):
-            create_monthly_plots(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_best, month, month + n_plots,
-                                 year, titlestr, vmax, outPicPath)
+            create_monthly_maps(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_best, month, month + n_plots,
+                                year, titlestr, vmax, outPicPath)
+            create_monthly_hists(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_best, month, month + n_plots,
+                                 year, titlestr, xbins, xrange, outPicPath)
 
 
-def create_monthly_plots(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_best, start_month, end_month, year,
-                         titlestr, vmax, outPicPath):
+def create_monthly_maps(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_best, start_month, end_month, year,
+                        titlestr, vmax, outPicPath):
     """
-    Create panel plot for the given year for the months from start month to end month - 1.
+    Create panel plot of maps for the given year for the months from start month to end month - 1.
 
     :param monthly_diffs_l4:
     :param monthly_diffs_had:
@@ -140,6 +142,7 @@ def create_monthly_plots(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_
     :param outPicPath:
     :return:
     """
+    print('Plotting maps...')
     ncols = end_month - start_month
     nrows = 3
     fig, axs = plt.subplots(nrows, ncols, figsize=(6.4 * ncols, 4.8 * nrows), sharex=True, sharey=True,
@@ -178,6 +181,58 @@ def create_monthly_plots(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_
         plt.close()
 
 
+def create_monthly_hists(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_best, start_month, end_month, year,
+                         titlestr, xbins, xrange, outPicPath):
+    """
+    Create panel plot of histograms for the given year for the months from start month to end month - 1.
+
+    :param monthly_diffs_l4:
+    :param monthly_diffs_had:
+    :param monthly_diffs_had_best:
+    :param start_month:
+    :param end_month:
+    :param year:
+    :param titlestr:
+    :param xbins:
+    :param xrange:
+    :param outPicPath:
+    :return:
+    """
+    print('Plotting histograms...')
+    ncols = end_month - start_month
+    nrows = 3
+    fig, axs = plt.subplots(nrows, ncols, figsize=(6.4 * ncols, 4.8 * nrows), sharex=True, sharey=True)
+    plot = None
+    for month in range(start_month, end_month):
+        print('Month:', month)
+        col = month - start_month
+
+        diff_l4 = monthly_diffs_l4.get(month, None)
+        ax = axs[0, col]
+        p = plot_monthly_hist(ax, diff_l4, 'L3 - L4 for ' + month_name[month], xbins, xrange)
+        if p is not None:
+            plot = p
+
+        diff_had = monthly_diffs_had.get(month, None)
+        ax = axs[1, col]
+        p = plot_monthly_hist(ax, diff_had, 'L3 - HadSST for ' + month_name[month], xbins, xrange)
+        if p is not None:
+            plot = p
+
+        diff_had_best = monthly_diffs_had_best.get(month, None)
+        ax = axs[2, col]
+        p = plot_monthly_hist(ax, diff_had_best, 'L3 - HadSST Best Data for ' + month_name[month], xbins, xrange)
+        if p is not None:
+            plot = p
+
+    if plot is not None:
+        fig.suptitle(titlestr + 'Histograms for ' + str(year) + ' from ' + month_name[start_month] + ' to '
+                     + month_name[end_month - 1], fontsize='xx-large')
+        plt.savefig(os.path.join(outPicPath, 'hists_' + str(year) + '_' + str(start_month) + '_' + str(end_month - 1)
+                                 + '.pdf'))
+        plt.close()
+
+
 def plot_monthly_map(ax, diff, titlestr, vmax):
     """
     Plot an individual map as part of a panel plot of monthly data on the given axis.
@@ -192,6 +247,27 @@ def plot_monthly_map(ax, diff, titlestr, vmax):
         p = diff.plot(vmax=vmax, ax=ax, add_colorbar=False, transform=ccrs.PlateCarree())
         ax.title.set_text(titlestr)
         ax.coastlines()
+        return p
+    else:
+        ax.set_axis_off()
+        return None
+
+def plot_monthly_hist(ax, diff, titlestr, xbins, xrange):
+    """
+    Plot an individual map as part of a panel plot of monthly data on the given axis.
+
+    :param ax:
+    :param diff:
+    :param titlestr:
+    :param xbins:
+    :param xrange:
+    :return:
+    """
+    if diff is not None:
+        p = diff.plot.hist(bins=xbins, range=xrange, ax=ax)
+        coef = add_gaussian(diff, ax, xbins, xrange)
+        plt.text(0.75, 0.8, '$a = {0:.3f}$\n$\mu = {1:.3f}$\n$\sigma = {2:.3f}$'.format(*coef), transform=ax.transAxes)
+        ax.title.set_text(titlestr)
         return p
     else:
         ax.set_axis_off()
@@ -223,57 +299,6 @@ def create_whole_series_plots(diff, titlestr, filestr, outPicPath, xbins, xrange
     :return:
     """
     titlestr = format_titlestr(titlestr)
-
-    # # Plot maps and histograms
-    # yearly_diffs = diff.groupby('time.year')
-    # for year, yearly_diff in yearly_diffs:
-    #     time = yearly_diff.time
-    #     time_size = time.size
-    #
-    #     # Panel plots of maps for each month for each year
-    #     if time_size == 1:
-    #         p = yearly_diff.plot(vmin=vmin, vmax=vmax,
-    #                              transform=ccrs.PlateCarree(), subplot_kws=dict(projection=ccrs.PlateCarree()))
-    #         p.axes.coastlines()
-    #     elif time_size == 2:
-    #         fig, axs = plt.subplots(1, 2, figsize=(6.4 * 2, 4.8 * 1), sharey=True,
-    #                                 subplot_kw=dict(projection=ccrs.PlateCarree()))
-    #         for i, ax in enumerate(axs):
-    #             yearly_diff[i, :, :].plot(vmin=vmin, vmax=vmax, ax=ax, transform=ccrs.PlateCarree())
-    #             ax.coastlines()
-    #     else:
-    #         p = yearly_diff.plot(x='lon', y='lat', col='time', col_wrap=None if time_size <= 4 else 4,
-    #                              vmin=vmin, vmax=vmax,
-    #                              aspect=yearly_diff['lon'].size / yearly_diff['lat'].size,
-    #                              transform=ccrs.PlateCarree(), subplot_kws=dict(projection=ccrs.PlateCarree()))
-    #         for ax in p.axes.flat:
-    #             ax.coastlines()
-    #
-    #     plt.suptitle(titlestr + 'Maps for ' + str(year))
-    #     plt.savefig(os.path.join(outPicPath, filestr + '_maps_' + str(year) + '.pdf'))
-    #     plt.close()
-    #
-    #     # The same thing for histograms
-    #     nrows = (time_size - 1) // 4 + 1
-    #     ncols = time_size if time_size <= 4 else 4
-    #     fig, axs = plt.subplots(nrows, ncols, figsize=(6.4 * ncols, 4.8 * nrows),
-    #                             sharex=(time_size > ncols), sharey=(time_size > 1))
-    #     if time_size == 1:
-    #         axs = [axs]
-    #     else:
-    #         axs = axs.flat
-    #     for i, ax in enumerate(axs):
-    #         if i < time_size:
-    #             yearly_diff[i, :, :].plot.hist(bins=xbins, range=xrange, ax=ax)
-    #             ax.title.set_text('time = ' + time[i].dt.strftime('%Y-%m-%dT%X').values)
-    #             coef = add_gaussian(yearly_diff[i, :, :], ax, xbins, xrange)
-    #             plt.text(0.75, 0.8, '$a = {0:.3f}$\n$\mu = {1:.3f}$\n$\sigma = {2:.3f}$'.format(*coef),
-    #                      transform=ax.transAxes)
-    #         else:
-    #             ax.set_axis_off()
-    #     plt.suptitle(titlestr + 'Histograms for ' + str(year))
-    #     plt.savefig(os.path.join(outPicPath, filestr + '_hists_' + str(year) + '.pdf'))
-    #     plt.close()
 
     # Whole series plots, all data
     p = diff.mean(dim='time').plot(vmin=vmin, vmax=vmax, transform=ccrs.PlateCarree(),
@@ -360,18 +385,14 @@ if __name__ == '__main__':
                         type=float, default=0.35)
     parser.add_argument('--xbins', help='Number of x bins to use for histograms. Default is 80.',
                         type=int, default=80)
-    parser.add_argument('--xmin_had', help='Minimum of x range for HadSST histograms. Default is -2.5.',
-                        type=float, default=-2.5)
-    parser.add_argument('--xmax_had', help='Maximum of x range for HadSST histograms. Default is 2.5.',
-                        type=float, default=2.5)
-    parser.add_argument('--xmin_l4', help='Minimum of x range for L4 histograms. Default is -1.25.',
-                        type=float, default=-1.25)
-    parser.add_argument('--xmax_l4', help='Maximum of x range for L4 histograms. Default is 1.25.',
-                        type=float, default=1.25)
+    parser.add_argument('--xmin', help='Minimum of x range for histograms. Default is -1.75.',
+                        type=float, default=-1.75)
+    parser.add_argument('--xmax', help='Maximum of x range for histograms. Default is 1.75.',
+                        type=float, default=1.75)
     parser.add_argument('--vmax', help='Maximum of colorscale for maps. Default is 0.8 degrees C.',
                         type=float, default=0.8)
     args = parser.parse_args()
 
     compare_L3_Had((args.hadfile, args.hadfileuncert), args.l3path, args.l4path, args.outPicPath,
-                   titlestr=args.titlestr, umax=args.umax, xbins=args.xbins, xrange_had=(args.xmin_had, args.xmax_had),
-                   xrange_l4=(args.xmin_l4, args.xmax_l4), vmax=args.vmax)
+                   titlestr=args.titlestr, umax=args.umax, xbins=args.xbins, xrange=(args.xmin, args.xmax),
+                   vmax=args.vmax)
