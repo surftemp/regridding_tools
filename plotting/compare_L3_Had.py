@@ -168,12 +168,11 @@ def create_monthly_plots(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_
             plot = p
 
     if plot is not None:
-        # fig.colorbar(plot, ax=axs)
-        fig.subplots_adjust(right=0.85)
-        cbar_ax = fig.add_axes([0.90, 0.15, 0.025, 0.7])
+        fig.subplots_adjust(right=0.825)
+        cbar_ax = fig.add_axes([0.875, 0.15, 0.025, 0.7])
         fig.colorbar(plot, cax=cbar_ax)
         fig.suptitle(titlestr + 'Maps for ' + str(year) + ' from ' + month_name[start_month] + ' to '
-                     + month_name[end_month - 1])
+                     + month_name[end_month - 1], fontsize='xx-large')
         plt.savefig(os.path.join(outPicPath, 'maps_' + str(year) + '_' + str(start_month) + '_' + str(end_month - 1)
                                  + '.pdf'))
         plt.close()
