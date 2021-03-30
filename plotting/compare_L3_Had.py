@@ -284,7 +284,7 @@ def get_monthly_diffs(yearly_diff):
     return monthly_diffs
 
 
-def create_whole_series_plots(diff, titlestr, filestr, outPicPath, xbins, xrange, vmin=None, vmax=None):
+def create_whole_series_plots(diff, titlestr, filestr, outPicPath, xbins, xrange, vmax=None):
     """
     Create maps, histograms and time series of statistics for a particular difference between two datasets.
 
@@ -294,15 +294,14 @@ def create_whole_series_plots(diff, titlestr, filestr, outPicPath, xbins, xrange
     :param outPicPath:
     :param xbins:
     :param xrange:
-    :param vmin:
     :param vmax:
     :return:
     """
     titlestr = format_titlestr(titlestr)
 
     # Whole series plots, all data
-    p = diff.mean(dim='time').plot(vmin=vmin, vmax=vmax, transform=ccrs.PlateCarree(),
-                                          subplot_kws=dict(projection=ccrs.PlateCarree()))
+    p = diff.mean(dim='time').plot(vmax=vmax, transform=ccrs.PlateCarree(),
+                                   subplot_kws=dict(projection=ccrs.PlateCarree()))
     p.axes.coastlines()
     plt.suptitle(titlestr + 'Mean Map')
     plt.savefig(os.path.join(outPicPath, filestr + '_mean_map.pdf'))
