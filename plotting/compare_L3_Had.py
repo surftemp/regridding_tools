@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+from calendar import month_name
 import os
 
 import cartopy.crs as ccrs
@@ -120,11 +121,11 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
         monthly_diffs_had_best = get_monthly_diffs(yearly_diff_had_best)
         for month in range(1, 12, n_plots):
             create_monthly_plots(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_best, month, month + n_plots,
-                                 year, vmax, outPicPath)
+                                 year, titlestr, vmax, outPicPath)
 
 
 def create_monthly_plots(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_best, start_month, end_month, year,
-                         vmax, outPicPath):
+                         titlestr, vmax, outPicPath):
     """
     Create panel plot for the given year for the months from start month to end month - 1.
 
@@ -134,6 +135,7 @@ def create_monthly_plots(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_
     :param start_month:
     :param end_month:
     :param year:
+    :param titlestr:
     :param vmax:
     :param outPicPath:
     :return:
@@ -142,49 +144,59 @@ def create_monthly_plots(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_
     nrows = 3
     fig, axs = plt.subplots(nrows, ncols, figsize=(6.4 * ncols, 4.8 * nrows), sharex=True, sharey=True,
                             subplot_kw=dict(projection=ccrs.PlateCarree()))
-    plotted = False
+    plot = None
     for month in range(start_month, end_month):
         print('Month:', month)
         col = month - start_month
 
         diff_l4 = monthly_diffs_l4.get(month, None)
         ax = axs[0, col]
-        if plot_monthly_map(ax, diff_l4, vmax):
-            plotted = True
+        p = plot_monthly_map(ax, diff_l4, 'L3 - L4 for ' + month_name[month], vmax)
+        if p is not None:
+            plot = p
 
         diff_had = monthly_diffs_had.get(month, None)
         ax = axs[1, col]
-        if plot_monthly_map(ax, diff_had, vmax):
-            plotted = True
+        p = plot_monthly_map(ax, diff_had, 'L3 - HadSST for ' + month_name[month], vmax)
+        if p is not None:
+            plot = p
 
         diff_had_best = monthly_diffs_had_best.get(month, None)
         ax = axs[2, col]
-        if plot_monthly_map(ax, diff_had_best, vmax):
-            plotted = True
+        p = plot_monthly_map(ax, diff_had_best, 'L3 - HadSST Best Data for ' + month_name[month], vmax)
+        if p is not None:
+            plot = p
 
-    if plotted:
+    if plot is not None:
+        # fig.colorbar(plot, ax=axs)
+        fig.subplots_adjust(right=0.85)
+        cbar_ax = fig.add_axes([0.90, 0.15, 0.025, 0.7])
+        fig.colorbar(plot, cax=cbar_ax)
+        fig.suptitle(titlestr + 'Maps for ' + str(year) + ' from ' + month_name[start_month] + ' to '
+                     + month_name[end_month - 1])
         plt.savefig(os.path.join(outPicPath, 'maps_' + str(year) + '_' + str(start_month) + '_' + str(end_month - 1)
                                  + '.pdf'))
         plt.close()
 
 
-def plot_monthly_map(ax, diff, vmax):
+def plot_monthly_map(ax, diff, titlestr, vmax):
     """
     Plot an individual map as part of a panel plot of monthly data on the given axis.
 
     :param ax:
     :param diff:
+    :param titlestr:
     :param vmax:
     :return:
-        A boolean indicating whether a plot has been created or not.
     """
     if diff is not None:
-        diff.plot(vmax=vmax, ax=ax, add_colorbar=False, transform=ccrs.PlateCarree())
+        p = diff.plot(vmax=vmax, ax=ax, add_colorbar=False, transform=ccrs.PlateCarree())
+        ax.title.set_text(titlestr)
         ax.coastlines()
-        return True
+        return p
     else:
         ax.set_axis_off()
-        return False
+        return None
 
 
 def get_monthly_diffs(yearly_diff):
