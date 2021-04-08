@@ -38,9 +38,5 @@ To verify the results for time series extraction, we compare the values for the 
 fully regridded dataset at matching spatial and temporal resolution.  The calculations specified in the task descriptions are the same but makegriddedSSTs.py and maketimeseriesSSTs.py 
 have different implementations (they do both rely on the cfpython and numpy libraries).
 
-Matching results across a large number of tests covering a range of latitudes and time periods (including areas where sea ice is prevalent) should provide
-some confidence that the calculations are correctly implemented.
-
-The [verification sub-folder](verification/README.md) contains a program for comapring the results of running makegriddedSSTs.py and maketimeseriesSSTs.py.  See the README.md file for more details.
-
+Tests are implemented as part of the sst-services repo - see [https://github.com/surftemp/sst-services/tree/master/test](https://github.com/surftemp/sst-services/tree/master/test)
  
