@@ -1,0 +1,6 @@
+name: xarr
+dependencies:
+- python=3.8
+- scipy
+- xarray
+- netcdf4
