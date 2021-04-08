@@ -4,7 +4,7 @@ import argparse
 import os
 import zipfile
 from calendar import monthrange
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from uuid import uuid4
 
 import cf

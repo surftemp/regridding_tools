@@ -10,7 +10,7 @@ import scipy.optimize
 import xarray as xr
 
 def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35, xbins=80, xrange=(-1.75, 1.75),
-                   vmax=0.8):
+                   vmax=0.8, compare_l4=True):
     """
     Compare regridded L3U data to L4 and HadSST.
 
@@ -24,6 +24,7 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
     :param xrange_had:
     :param xrange_l4:
     :param vmax:
+    :param compare_l4:
     :return:
     """
     titlestr = format_titlestr(titlestr)
@@ -36,7 +37,8 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
     dsHu = xr.open_dataset(hadfiles[1])
 
     # Read in the v2.1 L4 regridded to 5 degree for comparison
-    dsl4 = xr.open_mfdataset(os.path.join(l4path, '*.nc'), combine='by_coords')
+    if compare_l4:
+        dsl4 = xr.open_mfdataset(os.path.join(l4path, '*.nc'), combine='by_coords')
 
     # Rename some HadSST variables and make times compatible with L3 labelling
     dsH = dsH.rename_dims({'latitude': 'lat', 'longitude': 'lon'})
@@ -58,8 +60,9 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
     dsHu = dsHu.where(dsHu['time'] <= dsl3['time_bnds'][-1, 1], drop=True)
 
     # Truncate the L4 record to the same time period as the L3
-    dsl4 = dsl4.where(dsl4['time'] >= dsl3['time_bnds'][0, 0], drop=True)
-    dsl4 = dsl4.where(dsl4['time'] <= dsl3['time_bnds'][-1, 1], drop=True)
+    if compare_l4:
+        dsl4 = dsl4.where(dsl4['time'] >= dsl3['time_bnds'][0, 0], drop=True)
+        dsl4 = dsl4.where(dsl4['time'] <= dsl3['time_bnds'][-1, 1], drop=True)
 
     # Subset the dsH SST record to be on the same months as the L3 and then equalise the times
     dsl3_subset = [(year, month) in zip(dsl3.time.dt.year, dsl3.time.dt.month)
@@ -73,24 +76,27 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
     dsHu_usst['time'] = dsl3_sst['time']
 
     # Subset the L4 SST, sea fraction and sea ice fraction record to be on the same months as the L3
-    subset = [(year, month) in zip(dsl3.time.dt.year, dsl3.time.dt.month)
-              and (year, month) in zip(dsH.time.dt.year, dsH.time.dt.month)
-              for year, month in list(zip(dsl4.time.dt.year, dsl4.time.dt.month))]
-    dsl4_sst = dsl4.sst[subset, :, :]
-    dsl4_sf = dsl4.sea_fraction[subset, :, :]
-    dsl4_sif = dsl4.sea_ice_fraction[subset, :, :]
-    assert (dsl4_sst.time == dsl3_sst.time).all()
+    if compare_l4:
+        subset = [(year, month) in zip(dsl3.time.dt.year, dsl3.time.dt.month)
+                  and (year, month) in zip(dsH.time.dt.year, dsH.time.dt.month)
+                  for year, month in list(zip(dsl4.time.dt.year, dsl4.time.dt.month))]
+        dsl4_sst = dsl4.sst[subset, :, :]
+        dsl4_sf = dsl4.sea_fraction[subset, :, :]
+        dsl4_sif = dsl4.sea_ice_fraction[subset, :, :]
+        assert (dsl4_sst.time == dsl3_sst.time).all()
 
     # Mask all the SST datasets to effectively completely ocean cells
     # To avoid small-area low-N effects
-    dsl4_sst = dsl4_sst.where(dsl4_sf > 0.99).where(dsl4_sif < 0.01)
-    dsH_sst = dsH_sst.where(dsl4_sf > 0.99).where(dsl4_sif < 0.01)
-    dsHu_usst = dsHu_usst.where(dsl4_sf > 0.99).where(dsl4_sif < 0.01)
-    dsl3_sst = dsl3_sst.where(dsl4_sf > 0.99).where(dsl4_sif < 0.01)
+    if compare_l4:
+        dsl4_sst = dsl4_sst.where(dsl4_sf > 0.99).where(dsl4_sif < 0.01)
+        dsH_sst = dsH_sst.where(dsl4_sf > 0.99).where(dsl4_sif < 0.01)
+        dsHu_usst = dsHu_usst.where(dsl4_sf > 0.99).where(dsl4_sif < 0.01)
+        dsl3_sst = dsl3_sst.where(dsl4_sf > 0.99).where(dsl4_sif < 0.01)
 
     # Compare the  new regridded l3 and the previous l4
-    diff_l4 = dsl3_sst - dsl4_sst
-    create_whole_series_plots(diff_l4, titlestr + 'L3 - L4', 'l3-l4', outPicPath, xbins, xrange, vmax=vmax)
+    if compare_l4:
+        diff_l4 = dsl3_sst - dsl4_sst
+        create_whole_series_plots(diff_l4, titlestr + 'L3 - L4', 'l3-l4', outPicPath, xbins, xrange, vmax=vmax)
 
     # Compare the l3 and HadSST4
     diff_had = dsl3_sst - dsH_sst
@@ -107,23 +113,37 @@ def compare_L3_Had(hadfiles, l3path, l4path, outPicPath, titlestr='', umax=0.35,
                               xrange, vmax=vmax)
 
     # Create monthly plots
-    for t1, t2, t3 in zip(diff_l4.groupby('time.year'),
-                          diff_had.groupby('time.year'),
-                          diff_had_best.groupby('time.year')):
-        year, yearly_diff_l4 = t1
-        year, yearly_diff_had = t2
-        year, yearly_diff_had_best = t3
-        print('Year:', year)
-        n_plots = 4
-        assert (12 // n_plots) * n_plots == 12, 'n_plots must be a factor of 12.'
-        monthly_diffs_l4 = get_monthly_diffs(yearly_diff_l4)
-        monthly_diffs_had = get_monthly_diffs(yearly_diff_had)
-        monthly_diffs_had_best = get_monthly_diffs(yearly_diff_had_best)
-        for month in range(1, 12, n_plots):
-            create_monthly_maps(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_best, month, month + n_plots,
-                                year, titlestr, vmax, outPicPath)
-            create_monthly_hists(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_best, month, month + n_plots,
-                                 year, titlestr, xbins, xrange, outPicPath)
+    n_plots = 4
+    if compare_l4:
+        for t1, t2, t3 in zip(diff_l4.groupby('time.year'),
+                              diff_had.groupby('time.year'),
+                              diff_had_best.groupby('time.year')):
+            year, yearly_diff_l4 = t1
+            year, yearly_diff_had = t2
+            year, yearly_diff_had_best = t3
+            print('Year:', year)
+            assert (12 // n_plots) * n_plots == 12, 'n_plots must be a factor of 12.'
+            monthly_diffs_l4 = get_monthly_diffs(yearly_diff_l4)
+            monthly_diffs_had = get_monthly_diffs(yearly_diff_had)
+            monthly_diffs_had_best = get_monthly_diffs(yearly_diff_had_best)
+            for month in range(1, 12, n_plots):
+                create_monthly_maps(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_best, month, month + n_plots,
+                                    year, titlestr, vmax, outPicPath)
+                create_monthly_hists(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_best, month, month + n_plots,
+                                     year, titlestr, xbins, xrange, outPicPath)
+    else:
+        for t1, t2 in zip(diff_had.groupby('time.year'), diff_had_best.groupby('time.year')):
+            year, yearly_diff_had = t1
+            year, yearly_diff_had_best = t2
+            print('Year:', year)
+            assert (12 // n_plots) * n_plots == 12, 'n_plots must be a factor of 12.'
+            monthly_diffs_had = get_monthly_diffs(yearly_diff_had)
+            monthly_diffs_had_best = get_monthly_diffs(yearly_diff_had_best)
+            for month in range(1, 12, n_plots):
+                create_monthly_maps(None, monthly_diffs_had, monthly_diffs_had_best, month, month + n_plots,
+                                    year, titlestr, vmax, outPicPath)
+                create_monthly_hists(None, monthly_diffs_had, monthly_diffs_had_best, month, month + n_plots,
+                                     year, titlestr, xbins, xrange, outPicPath)
 
 
 def create_monthly_maps(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_best, start_month, end_month, year,
@@ -152,7 +172,10 @@ def create_monthly_maps(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_b
         print('Month:', month)
         col = month - start_month
 
-        diff_l4 = monthly_diffs_l4.get(month, None)
+        if monthly_diffs_l4 is not None:
+            diff_l4 = monthly_diffs_l4.get(month, None)
+        else:
+            diff_l4 = None
         ax = axs[0, col]
         p = plot_monthly_map(ax, diff_l4, 'L3 - L4 for ' + month_name[month], vmax)
         if p is not None:
@@ -207,7 +230,10 @@ def create_monthly_hists(monthly_diffs_l4, monthly_diffs_had, monthly_diffs_had_
         print('Month:', month)
         col = month - start_month
 
-        diff_l4 = monthly_diffs_l4.get(month, None)
+        if monthly_diffs_l4 is not None:
+            diff_l4 = monthly_diffs_l4.get(month, None)
+        else:
+            diff_l4 = None
         ax = axs[0, col]
         p = plot_monthly_hist(ax, diff_l4, 'L3 - L4 for ' + month_name[month], xbins, xrange)
         if p is not None:
@@ -390,8 +416,10 @@ if __name__ == '__main__':
                         type=float, default=1.75)
     parser.add_argument('--vmax', help='Maximum of colorscale for maps. Default is 0.8 degrees C.',
                         type=float, default=0.8)
+    parser.add_argument('--nol4', action='store_true', default=False,
+                        help='Do not compare to the L4 dataset only to the HadSST.')
     args = parser.parse_args()
 
     compare_L3_Had((args.hadfile, args.hadfileuncert), args.l3path, args.l4path, args.outPicPath,
                    titlestr=args.titlestr, umax=args.umax, xbins=args.xbins, xrange=(args.xmin, args.xmax),
-                   vmax=args.vmax)
+                   vmax=args.vmax, compare_l4=(not args.nol4))
