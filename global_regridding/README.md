@@ -153,7 +153,8 @@ python makegriddedL3USSTs.py 0.5 0.5 10-day AVHRRMTA_G --year 2019 --start_month
 ```
 ### submit_makegriddedL3USSTs.py
 
-Submit batch jobs of the L3U regridder on JASMIN for all years for a particular sensor.
+Submit batch jobs of the L3U regridder on JASMIN for all years for a particular sensor. Job output will be in
+makegriddedL3USSTs_SENSOR_YEAR.out and errors in the .err files with the same names.
 
 ```
 usage: Submit the L3U regridder for all the years for a particular sensor. [-h] sensor sst_l3u_path out_path
