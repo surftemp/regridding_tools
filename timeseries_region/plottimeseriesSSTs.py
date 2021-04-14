@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-#    sst-services
+#    regridding_tools
 #    Copyright (C) 2020  National Centre for Earth Observation (NCEO)
 #
 #    This program is free software: you can redistribute it and/or modify

@@ -40,14 +40,13 @@ import os.path
 import datetime
 import csv
 import numpy as np
-from math import cos, radians, sqrt, isnan, isinf, nan
-from calendar import monthrange
+from math import isnan, isinf
 import json
 import copy
-import sys
 from uuid import uuid4
-import zarr
-import math
+
+from .extractor import Extractor
+from .utils import TimeSeriesUtils, Aggregator
 
 # define some defaults
 _default_out_path = "/tmp/ts.csv"
@@ -65,203 +64,8 @@ _default_spatial_lambda = 3.0
 _default_anomalies = False
 _default_no_sea_ice_fraction = False
 
-SST_FIELD_NAMES = ['sea_water_temperature', 'sea_water_temperature standard_error', 'sea_ice_area_fraction']
-CLIMATOLOGY_FIELD_NAMES = ['sea_water_temperature', 'sea_ice_area_fraction']
-
 FIELD_PROPERTIES = json.loads(open(os.path.join(os.path.split(__file__)[0],"field_properties_template.json"),"r").read())
 GLOBAL_PROPERTIES = json.loads(open(os.path.join(os.path.split(__file__)[0],"global_properties_template.json"),"r").read())
-
-class Progress(object):
-
-    def __init__(self,label):
-        self.label = label
-        self.last_progress_frac = None
-
-    def report(self,msg,progress_frac):
-        if self.last_progress_frac == None or (progress_frac - self.last_progress_frac) >= 0.01:
-            self.last_progress_frac = progress_frac
-            i = int(100*progress_frac)
-            if i > 100:
-                i = 100
-            si = i // 2
-            sys.stdout.write("\r%s %s %-05s %s" % (self.label,msg,str(i)+"%","#"*si))
-            sys.stdout.flush()
-
-    def complete(self,msg):
-        sys.stdout.write("\n%s %s\n" % (self.label,msg))
-        sys.stdout.flush()
-
-    def clear(self):
-        sys.stdout.write("\r")
-
-
-class TimeSeriesUtils(object):
-    """
-    Implement some handy utility methods to help with time series extraction
-    """
-
-    # some metdata uses seconds since 1981
-    EPOCH = datetime.datetime(1981, 1, 1)
-
-    @staticmethod
-    def seconds_since_1981(dt):
-        """Compute the number of seconds since Jan 1st 1982"""
-        return int((dt - TimeSeriesUtils.EPOCH).total_seconds())
-
-    @staticmethod
-    def createLatitudeWeighting(lat_min, lat_max):
-        """Create an array of latitude area weighting values for the given latitude range"""
-        height = round((lat_max - lat_min) / 0.05)
-        arraydata = []
-        for y in range(0, height):
-            lat = lat_min + (0.05 * y) + 0.025
-            weight = cos(radians(lat))
-            arraydata.append(weight)
-        # reshape so can be multiplied along the latitude access of an array organised by (time,latitude,longitude)
-        return np.array(arraydata).reshape(-1,1)
-
-    @staticmethod
-    def kToDegC(k):
-        """Convert from kelvin to degrees centigrade"""
-        return k - 273.15
-
-    @staticmethod
-    def getDaysInYear(year):
-        """Get the number of days in a year"""
-        d1 = datetime.date(year, 1, 1)
-        d2 = datetime.date(year, 12, 31)
-        return 1 + (d2 - d1).days
-
-    @staticmethod
-    def lastDayInMonth(year, month):
-        """Work out how many days there are in a given month"""
-        return monthrange(year, month)[1]
-
-class TimeSeriesAggregator(object):
-    """
-    Aggregate a 3 dimensional box (bounded by time, latitude and longitude) to yield sst, anomaly, uncertainty
-    and sea ice fraction values according to the requirements
-    """
-
-    def __init__(self,lon_min,lat_min,lon_max,lat_max,f_max=1.0,output_anomaly=False,output_sea_ice=False,spatial_lambda=1.0,tau=3):
-        """
-        Construct the aggregator
-
-        :param lon_min:  minimum longitude of box, must be aligned on 0.05 degree boundary
-        :param lat_min:  minimum latitude of box, must be aligned on 0.05 degree boundary
-        :param lon_max:  maximum longitude of box, must be aligned on 0.05 degree boundary
-        :param lat_max:  maximum latitude of box, must be aligned on 0.05 degree boundary
-        :param f_max: sea ice fraction threshold
-        :param output_anomaly: output anomalies rather than absolute SST
-        :param output_sea_ice: output sea ice fraction
-        :param spatial_lambda: parameter for uncertainty calculation
-        :param tau: parameter for uncertainty calculation
-        """
-        self.lon_min = lon_min
-        self.lon_max = lon_max
-        self.lat_min = lat_min
-        self.lat_max = lat_max
-        self.lat_weighting = None # TimeSeriesUtils.createLatitudeWeighting(lat_min, lat_max)
-        self.f_max = f_max
-        self.output_anomaly = output_anomaly
-        self.output_sea_ice = output_sea_ice
-        self.spatial_lambda = spatial_lambda
-        self.tau = tau
-        self.climatology = None
-
-
-    def aggregate(self,start_dt,end_dt,data):
-        """
-        Perform aggregation on the data pertaining to a particular time period
-
-        :param start_dt: the start date of the period (inclusive)
-        :param end_dt: the end date of the period (inclusive)
-        :param fieldset: a cf.FieldSet containing the daily data for the period and space at 0.05 degree resolution
-
-        :return: tuple containing aggregted values (sst_or_anomaly,uncertainty,sea_ice_fraction)
-        """
-        sea_ice_fraction_index = SST_FIELD_NAMES.index("sea_ice_area_fraction")
-        sea_water_temp_index = SST_FIELD_NAMES.index("sea_water_temperature")
-        standard_error_index = SST_FIELD_NAMES.index("sea_water_temperature standard_error")
-
-        sea_ice_fractions = np.nan_to_num(data[:,:,:,sea_ice_fraction_index],copy=False)
-        sea_water_temp = np.nan_to_num(data[:, :, :, sea_water_temp_index],copy=False)
-        standard_error = np.nan_to_num(data[:, :, :, standard_error_index],copy=False)
-        land_mask = np.where(sea_water_temp > 0.0,1.0,0.0)
-
-        if self.lat_weighting is None:
-            self.lat_weighting = TimeSeriesUtils.createLatitudeWeighting(lat_min=self.lat_min,lat_max=self.lat_max)
-
-        sea_ice_mask = np.where(sea_ice_fractions > self.f_max, 0.0, 1.0)
-
-
-        mean_sea_water_temp_numerator = (sea_water_temp*self.lat_weighting*sea_ice_mask*land_mask).sum()
-        mean_sea_water_temp_denominator = (self.lat_weighting*sea_ice_mask*land_mask).sum()
-        if mean_sea_water_temp_denominator == 0:
-            mean_sea_water_temp = nan
-        else:
-            mean_sea_water_temp = mean_sea_water_temp_numerator / mean_sea_water_temp_denominator
-
-        is_leap_year = TimeSeriesUtils.getDaysInYear(start_dt.year) == 366
-
-        if self.output_anomaly:
-            # work out the relevant start and end time climatology indices in the range 0..364 (0..365 in leap years)
-            start_tindex = start_dt.timetuple().tm_yday-1
-            end_tindex = end_dt.timetuple().tm_yday-1
-
-            if is_leap_year:
-                climatology = self.leap_climatology[start_tindex:end_tindex + 1, :,:]
-            else:
-                climatology = self.climatology[start_tindex:end_tindex+1,:,:]
-            mean_sea_water_climatology_numerator = (climatology*self.lat_weighting*sea_ice_mask*land_mask).sum()
-            mean_sea_water_climatology_denominator = (self.lat_weighting*sea_ice_mask*land_mask).sum()
-            if mean_sea_water_climatology_denominator == 0:
-                mean_sea_water_climatology = nan
-            else:
-                mean_sea_water_climatology = mean_sea_water_climatology_numerator / mean_sea_water_climatology_denominator
-            sst_or_anomaly = mean_sea_water_temp - mean_sea_water_climatology
-        else:
-            sst_or_anomaly = mean_sea_water_temp
-
-        sea_ice_fraction_numerator = (self.lat_weighting*sea_ice_fractions*land_mask).sum()
-        sea_ice_fraction_denominator = (self.lat_weighting*land_mask).sum()
-        if sea_ice_fraction_denominator == 0:
-            sea_ice_fraction = 0.0
-        else:
-            sea_ice_fraction = sea_ice_fraction_numerator / sea_ice_fraction_denominator
-
-
-        # uncertainty calculation
-
-        standard_squared_error = np.square(standard_error)
-        N = (sea_ice_mask*land_mask).sum() # count used ssts
-        days_duration = 1+(end_dt - start_dt).days
-        mid_lat = (self.lat_max + self.lat_min) / 2
-        k = max((self.lat_max - self.lat_min) / self.spatial_lambda, 1.0) \
-                * max((self.lon_max - self.lon_min) / (self.spatial_lambda/cos(radians(mid_lat))), 1.0) \
-                * max(days_duration / float(self.tau), 1.0)
-        n = min(k,N)
-        uncertainty_numerator = (standard_squared_error*self.lat_weighting*sea_ice_mask*land_mask).sum()
-        uncertainty_demoninator = (self.lat_weighting*sea_ice_mask*land_mask).sum() * n
-        if uncertainty_demoninator == 0:
-            uncertainty = nan
-        else:
-            uncertainty = sqrt(uncertainty_numerator/uncertainty_demoninator)
-
-        return (sst_or_anomaly,uncertainty,sea_ice_fraction)
-
-    def setClimatology(self,climatology):
-        """
-        Assign a climatology (needed before calling aggregate if anomalies need to be calculated)
-        :param climatology: a cf.FieldList containing the 365-day climatology and 0.05 degree resolution for the bounded area
-        """
-        self.climatology = np.nan_to_num(climatology[:,:,:,CLIMATOLOGY_FIELD_NAMES.index("sea_water_temperature")],copy=False)
-
-        # leap climatology adds a extra day.  28th Feb is the day with index 58.
-        d59 = self.climatology[58:59,:,:]
-        d60 = self.climatology[59:60,:,:]
-        leap_day = (d59+d60)/2
-        self.leap_climatology = np.append(self.climatology[:59,:,:],np.append(leap_day,self.climatology[59:,:,:],axis=0),axis=0)
 
 HEADER2a = "Time series of %(time_resolution)s %(var_name)s averaged across ocean surface"+ \
     " within latitudes %(south_lat)0.2f and %(north_lat)0.2f and longitudes %(west_lon)0.2f and %(east_lat)0.2f," + \
@@ -531,223 +335,6 @@ class TimeSeriesNetCDF4Formatter(object):
         cf.write(fl,self.output_path)
         fl.close()
 
-
-
-class TimeSeriesExtractor(object):
-
-    """
-    This class handles the efficient extraction of data from the input (spatially resliced CCI/C3S/Climatology files)
-    for the exact time and space bounded regions to be processed, and providing an iterator to lazily return data
-    for each discrete time period.
-    """
-
-    def __init__(self,base_folder):
-        """
-        Constructor
-
-        :param base_folder:
-            the folder where the input (spatially resliced) dataset is stored.
-        """
-        self.base_folder = base_folder
-
-        self.sst_field_names = SST_FIELD_NAMES
-        self.climatology_field_names = CLIMATOLOGY_FIELD_NAMES
-
-
-    def getOffsets(self,min_lon,min_lat,max_lon,max_lat):
-        """
-        Work out a set of files required to span a bounding box, the offsets into the area covered by the files,
-        and the width and height of the bounding box in 0.05 degree increments
-
-        NOTE: assumes input data has 0,05 degree resolution!
-
-        :param min_lon:  minimum longitude of box, must be aligned on 0.05 degree boundary
-        :param min_lat:  minimum latitude of box, must be aligned on 0.05 degree boundary
-        :param max_lon:  maximum longitude of box, must be aligned on 0.05 degree boundary
-        :param max_lat:  maximum latitude of box, must be aligned on 0.05 degree boundary
-
-        :return: (start-offset in longitude dimension, start-offset in latitude dimension,width of longitude slice,height of latitude slice)
-        """
-        height = round((max_lat - min_lat) / 0.05)
-        width = round((max_lon - min_lon) / 0.05)
-        lat_offset = round((min_lat+90)/0.05)
-        lon_offset = round((min_lon+180)/0.05)
-
-        return (lon_offset,lat_offset,width,height)
-
-    @staticmethod
-    def createTimePeriods(time_resolution,start_date,end_date):
-        """Given a time resolution and an inclusive start and end date, find the contained time periods
-
-        :param time_resolution:  the time resolution as "daily"|"pentad"|"dekad"|"N" where N is an integer number of days
-        :param start_date: the datetime of the start day (inclusive).  Time must be set to mid day.
-        :param end_date: the datetime of the end day (inclusive).  Time must be set to mid day.
-
-        start_date and end_date must be within the same year
-
-        :return: a list of time periods in the date range expressed as (start,middle,end) tuples
-
-        where start is a datetime set to mid-day on the first day of the period
-        where end is a datetime set to mid-day on the last day of the period
-        where middle is a datetime representing the middle of the period.  The time may be set to mid-day or midnight.
-        """
-        periods = []
-        dt = start_date
-        last_day_in_end_month = TimeSeriesUtils.lastDayInMonth(end_date.year,end_date.month)
-
-        # basic date range checks
-        if start_date.hour != 12 or start_date.minute != 0 or start_date.second != 0:
-            raise Exception("start date time is not midday")
-        if end_date.hour != 12 or end_date.minute != 0 or end_date.second != 0:
-            raise Exception("end date time is not midday")
-        if start_date.year != end_date.year:
-            raise Exception("start date and end date must be within the same year")
-        if start_date > end_date:
-            raise Exception("start date cannot be later than end date")
-
-        # work out the periods based on the desired time resolution
-        if time_resolution == "daily":
-            while dt <= end_date:
-                periods.append((dt-datetime.timedelta(seconds=12*60*60),dt,dt+datetime.timedelta(seconds=12*60*60)))
-                dt += datetime.timedelta(1)
-        elif time_resolution == "monthly":
-            # check start and end dates are aligned on month
-            if start_date.day != 1 or end_date.day != last_day_in_end_month:
-                raise Exception("internal error, start/end dates not correctly month aligned")
-            while dt <= end_date:
-                y = dt.year
-                m = dt.month
-                dim = monthrange(y,m)[1]
-                periods.append((datetime.datetime(y,m,1,12,0,0), datetime.datetime(y,m,15,12,0,0), datetime.datetime(y,m,dim,12,0,0)))
-                dt = dt + datetime.timedelta(dim)
-        elif time_resolution == "5-day":
-            if start_date.day not in [1, 6, 11, 16, 21, 26] or end_date.day not in [5, 10, 15, 20, 25,
-                                                                     TimeSeriesUtils.lastDayInMonth(end_date.year,
-                                                                                                        end_date.month)]:
-                raise Exception("start or end date not correctly aligned for pentads")
-            while dt <= end_date:
-                len_days = 5
-                mid_dt = dt + datetime.timedelta(2)
-                if dt.day == 26:
-                    # for the last pentad, include all remaining days in the month
-                    len_days = monthrange(dt.year, dt.month)[1] - 25
-                    if dt.month==2:
-                        mid_dt = dt + datetime.timedelta(1) # use 27th as mid point of the last short pentad in february
-                periods.append((dt, mid_dt, dt + datetime.timedelta(len_days-1)))
-                dt = dt + datetime.timedelta(len_days)
-        elif time_resolution == "10-day":
-            if start_date.day not in [1,11,21] or end_date.day not in [10,20,TimeSeriesUtils.lastDayInMonth(end_date.year,end_date.month)]:
-                raise Exception("start or end date not correctly aligned for dekads")
-            while dt <= end_date:
-                len_days = 10
-                mid_dt = dt + datetime.timedelta(4)
-                if dt.day == 21:
-                    # for the last dekad, include all remaining days in the month
-                    len_days = monthrange(dt.year, dt.month)[1] - 20
-                periods.append((dt, mid_dt, dt + datetime.timedelta(len_days-1)))
-                dt = dt + datetime.timedelta(len_days)
-        else:
-            # try to treat time_resolution as an integer number of days
-            try:
-                time_resolution = int(time_resolution)
-            except:
-                raise Exception("Invalid time resolution %s"%(time_resolution))
-            dt = start_date
-            while dt <= end_date:
-                len_days = time_resolution
-                peek_dt = dt + datetime.timedelta(len_days)
-                if peek_dt > end_date:
-                    # do not "overflow" the year, make the last period run to end
-                    len_days = 1+int((end_date - dt).total_seconds()/(60*60*24))
-                mid_dt = dt - datetime.timedelta(0.5) + datetime.timedelta(len_days/2)
-                periods.append((dt, mid_dt, dt + datetime.timedelta(len_days-1)))
-                dt += datetime.timedelta(len_days)
-            # now check if the last period is too short
-            (last_start,_,last_end) = periods[-1]
-
-            # truncate the last period to fit into the date range, first work out the length in days
-            last_dur = 1+int((end_date - last_start).total_seconds()/(60*60*24))
-
-            if last_dur < time_resolution/2 and len(periods) > 1:
-                # then merge last two time periods to yield a period that will be less than N*1.5
-                (second_last_start, _, _) = periods[-2]
-                periods = periods[:-1]
-                last_dur = 1+int((end_date - second_last_start).total_seconds() / (60 * 60 * 24))
-                mid = second_last_start-datetime.timedelta(0.5)+datetime.timedelta(last_dur/2)
-                periods[-1] = (second_last_start,mid,end_date)
-
-        return periods
-
-    def generateYearData(self,start_date,end_date,time_resolution,min_lon,min_lat,max_lon,max_lat):
-        """Generator that yields the time period within a year
-
-        :param start_date: the datetime of the start day (inclusive).  Time must be set to mid day.
-        :param end_date: the datetime of the end day (inclusive).  Time must be set to mid day.
-        :param time_resolution:  the time resolution as "daily"|"pentad"|"dekad"|"N" where N is an integer number of days
-        :param min_lon:  minimum longitude of box, must be aligned on 0.05 degree boundary
-        :param min_lat:  minimum latitude of box, must be aligned on 0.05 degree boundary
-        :param max_lon:  maximum longitude of box, must be aligned on 0.05 degree boundary
-        :param max_lat:  maximum latitude of box, must be aligned on 0.05 degree boundary
-
-        The generator yields ((start_dt,mid_dt,end_dt),cf.FieldList) tuples
-        """
-
-        # first work out how to map the spatial box to the input data
-
-        input_path = os.path.join(self.base_folder,"%d.zarr"%(start_date.year))
-        z = zarr.open(input_path,mode='r')
-
-        (lon_offset,lat_offset,width,height) = self.getOffsets(min_lon,min_lat,max_lon,max_lat)
-
-        time_periods = TimeSeriesExtractor.createTimePeriods(time_resolution,start_date,end_date)
-
-        for(period_start_dt,period_mid_dt,period_end_dt) in time_periods:
-            doy_start = period_start_dt.timetuple().tm_yday - 1
-            doy_end = period_end_dt.timetuple().tm_yday - 1
-            subf = z[doy_start:doy_end+1,lat_offset:lat_offset+height,lon_offset:lon_offset+width,:]
-            yield ((period_start_dt,period_mid_dt,period_end_dt),subf)
-
-    def generateData(self, start_dt, end_dt, time_resolution, min_lon, min_lat, max_lon, max_lat):
-        """Generator that lazily yields the time period data for a given time and space range
-
-        :param start_date: the datetime of the start day (inclusive).  Time must be set to mid day.
-        :param end_date: the datetime of the end day (inclusive).  Time must be set to mid day.
-        :param time_resolution:  the time resolution as "daily"|"pentad"|"dekad"|"N" where N is an integer number of days
-        :param min_lon:  minimum longitude of box, must be aligned on 0.05 degree boundary
-        :param min_lat:  minimum latitude of box, must be aligned on 0.05 degree boundary
-        :param max_lon:  maximum longitude of box, must be aligned on 0.05 degree boundary
-        :param max_lat:  maximum latitude of box, must be aligned on 0.05 degree boundary
-
-        The generator yields ((start_dt,mid_dt,end_dt),cf.FieldList) tuples
-        """
-        year = start_dt.year
-        while year <= end_dt.year:
-            # go through each year in turn...
-            slice_end_dt = datetime.datetime(year,12,31,12,0,0) if year < end_dt.year else end_dt
-            slice_start_dt = datetime.datetime(year,1,1,12,0,0) if year > start_dt.year else start_dt
-            # yield from that year's generator until exhausted
-            yield from self.generateYearData(slice_start_dt,slice_end_dt,time_resolution,min_lon,min_lat,max_lon,max_lat)
-            # move to the next year
-            year += 1
-
-    def extractClimatology(self, min_lon, min_lat, max_lon, max_lat):
-        """Extract the climatology for a given bounding box
-
-        :param min_lon:  minimum longitude of box, must be aligned on 0.05 degree boundary
-        :param min_lat:  minimum latitude of box, must be aligned on 0.05 degree boundary
-        :param max_lon:  maximum longitude of box, must be aligned on 0.05 degree boundary
-        :param max_lat:  maximum latitude of box, must be aligned on 0.05 degree boundary
-
-        :return: a cf.FieldList containing the 365-day climatology covering the bounded area
-        """
-        input_path = os.path.join(self.base_folder, "climatology.zarr")
-        z = zarr.open(input_path, mode='r')
-
-        (lon_offset, lat_offset, width, height) = self.getOffsets(min_lon, min_lat, max_lon, max_lat)
-
-        return z[:, lat_offset:lat_offset + height, lon_offset:lon_offset + width, :]
-
-
 def makeTimeSeriesSSTs(lon_min,lon_max,lat_min,lat_max,time_resolution,
                        start_date=_default_start_date,
                        end_date=_default_end_date,
@@ -806,10 +393,10 @@ def makeTimeSeriesSSTs(lon_min,lon_max,lat_min,lat_max,time_resolution,
         output_csv = True
 
     # create an extractor to read the relevant part of the input data covering the extraction times and spatial boundaries
-    extractor = TimeSeriesExtractor(input_path)
+    extractor = Extractor(input_path)
 
-    # create an aggregator to aggregate each period in the extracted data
-    aggregator = TimeSeriesAggregator(lon_min=lon_min, lat_min=lat_min, lon_max=lon_max,
+    # create an Aggregator to aggregate each period in the extracted data
+    aggregator = Aggregator(mode="timeseries",lon_min=lon_min, lat_min=lat_min, lon_max=lon_max,
             lat_max=lat_max, f_max=f_max, output_sea_ice=output_sea_ice, output_anomaly=anomalies,
             spatial_lambda=spatial_lambda, tau=tau)
 
@@ -833,7 +420,6 @@ def makeTimeSeriesSSTs(lon_min,lon_max,lat_min,lat_max,time_resolution,
         climatology = extractor.extractClimatology(min_lon=lon_min, min_lat=lat_min, max_lon=lon_max, max_lat=lat_max)
         aggregator.setClimatology(climatology)
 
-    p = Progress("makeTimeSeriesSSTs")
     period_duration = end_date.timestamp() - start_date.timestamp()
 
     # loop over each time period in the required date range...
@@ -851,9 +437,6 @@ def makeTimeSeriesSSTs(lon_min,lon_max,lat_min,lat_max,time_resolution,
         formatter.write(s_dt,mid_dt,e_dt,sst_or_anomaly,uncertainty,sea_ice_fraction)
 
         frac = (mid_dt.timestamp() - start_date.timestamp()) / period_duration
-        p.report("Processing",frac)
-
-    p.clear()
 
     formatter.close()
 
