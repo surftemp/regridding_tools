@@ -117,7 +117,6 @@ class Verifier(object):
 
     def open(self):
         self.regrid_fields = cf.read(os.path.join(self.regrid_folder,"*.nc"),aggregate={"relaxed_identities": True})
-        print(self.regrid_fields)
 
     def verify(self,name,is_anomaly):
         logger.info("Verifying results for test: %s",name)
@@ -228,7 +227,14 @@ class Verifier(object):
         regrid_field = self.regrid_fields.select(field_name)[0]
         regrid_ts = regrid_field.subspace[:, lat_index, lon_index].array
 
-        regrid_values = np.ma.filled(regrid_ts,fill_value=math.nan).flatten()
+        regrid_values = np.ma.filled(regrid_ts,fill_value=math.nan)
+        if field_name == "sea_ice_area_fraction":
+            sea_area_fraction = self.regrid_fields.select("sea_area_fraction")[0].subspace[:, lat_index, lon_index].array
+            sea_area_fraction = np.ma.filled(sea_area_fraction, fill_value=0.0)
+            regrid_values = np.where(sea_area_fraction > 0,regrid_values,np.nan)
+
+
+        regrid_values = regrid_values.flatten()
         # print("regridded:",regrid_filled.flatten().tolist())
         abs_diffs = np.abs(ts_values-regrid_values)
         # print("absdiffs:", abs_diffs.flatten().tolist())
@@ -253,9 +259,13 @@ class Verifier(object):
         lon_index_max = round((180 + max_lon) / 0.05)
 
         regrid_field = self.regrid_fields.select(field_name)[0]
-        regrid_area = regrid_field.subspace[:, lat_index_min:lat_index_max, lon_index_min:lon_index_max].array
 
-        regrid_values = np.ma.filled(regrid_area,fill_value=math.nan)
+        regrid_area = regrid_field.subspace[:, lat_index_min:lat_index_max, lon_index_min:lon_index_max].array
+        regrid_values = np.ma.filled(regrid_area, fill_value=math.nan)
+        if field_name == "sea_ice_area_fraction":
+            sea_area_fraction = self.regrid_fields.select("sea_area_fraction")[0].subspace[:, lat_index_min:lat_index_max, lon_index_min:lon_index_max].array
+            sea_area_fraction = np.ma.filled(sea_area_fraction, fill_value=0.0)
+            regrid_values = np.where(sea_area_fraction > 0,regrid_values,np.nan)
 
         if regrid_values.shape != region_values.shape:
             msg = "Different shapes %s"%(test)
