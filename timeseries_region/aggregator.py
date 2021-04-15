@@ -26,7 +26,7 @@ Aggregation for timeseries applies aggregation across all dimensions
 """
 from math import cos, radians, nan, sqrt
 import numpy as np
-from .utils import SST_FIELD_NAMES, CLIMATOLOGY_FIELD_NAMES, TimeSeriesUtils
+from utils import SST_FIELD_NAMES, CLIMATOLOGY_FIELD_NAMES, TimeSeriesUtils
 
 class Aggregator(object):
     """

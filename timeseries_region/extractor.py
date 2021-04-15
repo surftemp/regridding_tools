@@ -25,7 +25,7 @@ import datetime
 import zarr
 import os.path
 
-from .utils import SST_FIELD_NAMES, CLIMATOLOGY_FIELD_NAMES, createTimePeriods
+from utils import SST_FIELD_NAMES, CLIMATOLOGY_FIELD_NAMES, createTimePeriods
 
 class Extractor(object):
 

@@ -38,18 +38,13 @@ This module can also be invoked by importing and calling the makeTimeSeriesSSTs 
 import cf
 import os.path
 import datetime
-import csv
 import numpy as np
-from math import cos, radians, sqrt, isnan, isinf, nan
-from calendar import monthrange
 import json
 import copy
-import sys
 from uuid import uuid4
-import zarr
-import math
-from .utils import TimeSeriesUtils, createTimePeriods, Aggregator, SST_FIELD_NAMES, CLIMATOLOGY_FIELD_NAMES
-from .extractor import Extractor
+from utils import TimeSeriesUtils
+from extractor import Extractor
+from aggregator import Aggregator
 
 # define some defaults
 _default_out_path = "/tmp/region.nc"

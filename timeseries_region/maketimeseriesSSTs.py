@@ -45,8 +45,9 @@ import json
 import copy
 from uuid import uuid4
 
-from .extractor import Extractor
-from .utils import TimeSeriesUtils, Aggregator
+from extractor import Extractor
+from utils import TimeSeriesUtils
+from aggregator import Aggregator
 
 # define some defaults
 _default_out_path = "/tmp/ts.csv"

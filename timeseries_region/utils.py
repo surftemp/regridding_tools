@@ -74,7 +74,7 @@ class TimeSeriesUtils(object):
 def createTimePeriods(time_resolution, start_date, end_date):
     """Given a time resolution and an inclusive start and end date, find the contained time periods
 
-    :param time_resolution:  the time resolution as "daily"|"pentad"|"dekad"|"N" where N is an integer number of days
+    :param time_resolution:  the time resolution as "pentad"|"dekad"|"N" where N is an integer number of days
     :param start_date: the datetime of the start day (inclusive).  Time must be set to mid day.
     :param end_date: the datetime of the end day (inclusive).  Time must be set to mid day.
 
@@ -101,12 +101,7 @@ def createTimePeriods(time_resolution, start_date, end_date):
         raise Exception("start date cannot be later than end date")
 
     # work out the periods based on the desired time resolution
-    if time_resolution == "daily":
-        while dt <= end_date:
-            periods.append(
-                (dt - datetime.timedelta(seconds=12 * 60 * 60), dt, dt + datetime.timedelta(seconds=12 * 60 * 60)))
-            dt += datetime.timedelta(1)
-    elif time_resolution == "monthly":
+    if time_resolution == "monthly":
         # check start and end dates are aligned on month
         if start_date.day != 1 or end_date.day != last_day_in_end_month:
             raise Exception("internal error, start/end dates not correctly month aligned")
