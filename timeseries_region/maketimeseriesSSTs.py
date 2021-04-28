@@ -48,6 +48,7 @@ from uuid import uuid4
 from extractor import Extractor
 from utils import TimeSeriesUtils
 from aggregator import Aggregator
+from netcdf4formatter import NetCDF4Formatter
 
 # define some defaults
 _default_out_path = "/tmp/ts.csv"
@@ -169,173 +170,6 @@ class TimeSeriesCSVFormatter(object):
         self.writer = None
         self.outfile.close()
 
-class TimeSeriesNetCDF4Formatter(object):
-    """
-    Create a formatter for writing data to a netcdf4 output file
-    """
-
-    def __init__(self,path="",time_resolution="daily",f_max=1.0,spatial_lambda=1.0,tau=3,output_anomaly=False,output_sea_ice=False,lon_min=0,lat_min=0,lon_max=5,lat_max=5,comment=""):
-        """
-        Construct the netcdf4 formatter using options
-
-        :param path: the output path
-        :param time_resolution: the time resolution
-        :param f_max: sea ice threshold
-        :param spatial_lambda: parameter for uncertainty calculation
-        :param tau: parameter for uncertainty calculation
-        :param output_anomaly: output anomaly rather than absolute SST
-        :param output_sea_ice: include sea ice fraction in output
-        :param lon_min:  minimum longitude of box, must be aligned on 0.05 degree boundary
-        :param lat_min:  minimum latitude of box, must be aligned on 0.05 degree boundary
-        :param lon_max:  maximum longitude of box, must be aligned on 0.05 degree boundary
-        :param lat_max:  maximum latitude of box, must be aligned on 0.05 degree boundary
-        :param comment: an extra string to add to the output file metadata
-        """
-        self.output_path = path
-        self.time_resolution = time_resolution
-        self.output_anomaly = output_anomaly
-        self.output_sea_ice = output_sea_ice
-        self.lon_min = lon_min
-        self.lon_max = lon_max
-        self.lat_min = lat_min
-        self.lat_max = lat_max
-        self.comment = comment
-        self.f_max = f_max
-        self.spatial_lambda = spatial_lambda
-        self.tau = tau
-        self.datapoints = []
-        self.min_dt = None
-        self.max_dt = None
-        self.uuid = str(uuid4())
-
-    def write(self,start_dt,mid_dt,end_dt,sst_or_anomaly,uncertainty,sea_ice_fraction):
-        """
-        Write an entry to the output file covering a time period
-        :param start_dt: start date of the period
-        :param mid_dt: mid date of the period
-        :param end_dt: end date of the period
-        :param sst_or_anomaly: the absolute SST or anomaly SST value
-        :param uncertainty: the estimated uncertainty standard error
-        :param sea_ice_fraction: the sea ice fraction
-        """
-        self.datapoints.append((start_dt,mid_dt,end_dt,sst_or_anomaly,uncertainty,sea_ice_fraction))
-
-    def createField(self,values,name,long_name,units):
-        """
-        Create a cf.Field object with a time axis and metadata
-        :param values: the array of values to form the field's data
-        :param name: the field short name
-        :param long_name: the field long name
-        :param units: the field's measurement units
-        :return: a cf.Field object
-        """
-        properties = copy.deepcopy(FIELD_PROPERTIES)
-        field = cf.Field(properties=properties)
-
-        for key in GLOBAL_PROPERTIES:
-            value = GLOBAL_PROPERTIES[key]
-            field.nc_set_global_attribute(key,value)
-
-        field.nc_set_global_attribute('f_max', self.f_max)
-        field.nc_set_global_attribute('lambda', self.spatial_lambda)
-        field.nc_set_global_attribute('tau', np.int32(self.tau))
-
-        field.nc_set_variable(name)
-        field.set_property("standard_name",long_name)
-        field.long_name = long_name
-
-        # Note - domain axes are constructed based on running .creation_commands() on a regridded cf.Field
-
-        # domain axis - time
-        c = cf.DomainAxis(size=len(values))
-        c.nc_set_dimension('time')
-        field.set_construct(c, key='domainaxis0')
-
-        # Set the field data from the passed values
-        arr = np.array(values).reshape((-1))
-        m_arr = np.ma.masked_invalid(arr)
-        data = cf.Data(m_arr, units=units, dtype='i4' if isinstance(values[0],int) else "f4")
-        field.set_data(data, axes=('domainaxis0'))
-
-        # Note - dimension coordinates below are constructed based on running .creation_commands() on a regridded cf.Field
-
-        # dimension_coordinate - Time
-        c = cf.DimensionCoordinate()
-        c.set_properties({'long_name': 'reference time of sst field', 'standard_name': 'time', 'axis': 'T',
-                          'units': 'seconds since 1981-01-01 00:00:00', 'calendar': 'gregorian', 'comment': ''})
-        c.nc_set_variable('time')
-        data = cf.Data([mdt for (_,mdt,_) in self.times], units='seconds since 1981-01-01 00:00:00', calendar='gregorian', dtype='i4')
-        c.set_data(data)
-        b = cf.Bounds()
-        b.set_properties({'long_name': 'Time cell boundaries',
-                          'comment': 'Contains the start and end times for the time period the data represent.',
-                          'units': 'seconds since 1981-01-01 00:00:00', 'calendar': 'gregorian'})
-        b.nc_set_variable('time_bnds')
-        data = cf.Data([[sdt, edt] for (sdt,_,edt) in self.times], units='seconds since 1981-01-01 00:00:00', calendar='gregorian',
-                       dtype='i4')
-        b.set_data(data)
-        c.set_bounds(b)
-        field.set_construct(c, axes=('domainaxis0',), key='dimensioncoordinate0', copy=False)
-
-        comment = HEADER2a%({
-            "time_resolution":self.time_resolution,
-            "var_name": "sea surface temperature anomaly" if self.output_anomaly else "sea surface_temperature",
-            "south_lat": self.lat_min,
-            "north_lat": self.lat_max,
-            "west_lon": self.lon_min,
-            "east_lat": self.lon_max
-        })
-
-        if self.comment:
-            comment += self.comment
-            field.nc_set_global_attribute("comment",comment)
-
-        return field
-
-    def close(self):
-        """Close the formatter and flush all changes to disk"""
-        years = []
-        months = []
-        days = []
-        doys = []
-        uncertainties = []
-        sea_ice_fractions = []
-        self.times = []
-        ssts_or_anomalies = []
-        self.min_dt = self.datapoints[0][0]
-        self.max_dt = self.datapoints[-1][0]
-
-        # go through each of the collected data points and append the fields to arrays, ready to package into cf.Field
-        for datapoint in self.datapoints:
-            (sdt,dt,edt,sst_or_anomaly,uncertainty,sea_ice_fraction) = datapoint
-            self.times.append((TimeSeriesUtils.seconds_since_1981(sdt),TimeSeriesUtils.seconds_since_1981(dt),TimeSeriesUtils.seconds_since_1981(edt)))
-            years.append(dt.year)
-            months.append(dt.month)
-            days.append(dt.day)
-            doys.append(dt.timetuple().tm_yday)
-            ssts_or_anomalies.append(sst_or_anomaly)
-            uncertainties.append(uncertainty)
-            sea_ice_fractions.append(sea_ice_fraction)
-
-        # create the fields that will be written to file
-        year_field = self.createField(years,"calendar_year","calendar year","1")
-        month_field = self.createField(months, "calendar_month", "calendar month","1")
-        day_field = self.createField(days, "day_of_month", "day of month","1")
-        doy_field = self.createField(doys, "day_of_year", "day of year","1")
-        sst_or_anomaly_field = self.createField(ssts_or_anomalies,
-                    "sst_anomaly" if self.output_anomaly else "sst",
-                    "sea_water_temperature_anomaly" if self.output_anomaly else "sea_water_temperature","K")
-        uncertainty_field = self.createField(uncertainties, "sst_uncertainty", "sea_water_temperature uncertainty","K")
-        fields = [year_field,month_field,day_field,doy_field,sst_or_anomaly_field,uncertainty_field]
-        if self.output_sea_ice:
-            sea_ice_field = self.createField(sea_ice_fractions, "sea_ice_area_fraction", "sea_ice_area_fraction","1")
-            fields.append(sea_ice_field)
-
-        # write out to file
-        fl = cf.FieldList(fields)
-        cf.write(fl,self.output_path)
-        fl.close()
-
 def makeTimeSeriesSSTs(lon_min,lon_max,lat_min,lat_max,time_resolution,
                        start_date=_default_start_date,
                        end_date=_default_end_date,
@@ -414,7 +248,15 @@ def makeTimeSeriesSSTs(lon_min,lon_max,lat_min,lat_max,time_resolution,
     if output_csv:
         formatter = TimeSeriesCSVFormatter(**formatter_args)
     else:
-        formatter = TimeSeriesNetCDF4Formatter(**formatter_args)
+        formatter_args["header"] = HEADER2a % ({
+            "time_resolution": time_resolution,
+            "var_name": "sea surface temperature anomaly" if anomalies else "sea surface_temperature",
+            "south_lat": lat_min,
+            "north_lat": lat_max,
+            "west_lon": lon_min,
+            "east_lat": lon_max
+        })
+        formatter = NetCDF4Formatter(**formatter_args)
 
     # if outputting anomalies, we'll need the climatology.  Extract it and pass it to the aggregator
     if anomalies:
@@ -435,7 +277,7 @@ def makeTimeSeriesSSTs(lon_min,lon_max,lat_min,lat_max,time_resolution,
         # print("slice:",mid_dt,sst_or_anomaly,uncertainty,sea_ice_fraction)
 
         # and append it to the output file
-        formatter.write(s_dt,mid_dt,e_dt,sst_or_anomaly,uncertainty,sea_ice_fraction)
+        formatter.write(s_dt,mid_dt,e_dt,np.array([[sst_or_anomaly]]),np.array([[uncertainty]]),np.array([[sea_ice_fraction]]))
 
         frac = (mid_dt.timestamp() - start_date.timestamp()) / period_duration
 
