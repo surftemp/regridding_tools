@@ -156,6 +156,11 @@ class TimeSeriesCSVFormatter(object):
         :param sea_ice_fraction: the sea ice fraction
         """
         # anomalies are the difference between temperatures so do not need to be converted from kelvin to centigrade
+
+        sst_or_anomaly = sst_or_anomaly[0][0]
+        uncertainty = uncertainty[0][0]
+        sea_ice_fraction = sea_ice_fraction[0][0]
+
         sst_or_anomaly_degC = [TimeSeriesUtils.kToDegC(sst_or_anomaly)] if not self.output_anomaly else []
 
         outrow = [mid_dt.year, mid_dt.month, mid_dt.day,
