@@ -1,13 +1,13 @@
 spec = {
-  "name": "test1",
-  "description": "test regridding vs region for 0.05 degrees, pentad, dec 2018",
+  "name": "test4",
+  "description": "test regridding to 0.2 degrees daily for 1 month",
   "spec": {
-    "time_step": "5-day",
-    "n_daily_step": "5",
-    "longitude_step": "0.05",
-    "latitude_step": "0.05",
+    "time_step": "N-daily",
+    "n_daily_step": "1",
+    "longitude_step": "0.2",
+    "latitude_step": "0.2",
     "email_address": "test@test.com",
-    "start_date": "2018-12-01",
+    "start_date": "2018-01-01",
     "end_date": "2018-12-31",
     "exclude_sea_ice": True,
     "sea_ice_threshold": "100",
@@ -17,10 +17,10 @@ spec = {
     "generate_sea_ice_fraction": True,
     "include_bias_adjustments": True
   },
-  "region_tests": [((-10,-50),(-5,-40)),((100,-40),(120,-20)),((-30,60),(-10,70)),((-80,-50),(-70,-40)),((-5,-5),(5,5))],
-  "timeseries_tests": [],
+  "region_tests": [],
+  "timeseries_tests": [(-10,85),(-10,80),(-10,75),(-10,70),(-10,65),(-10,60),(30,-60),(30,-50),(30,-40),(30,-30)],
   "expected": {
-    "shape": (6,3600,7200),
+    "shape": (365,180*5,360*5),
     "fields": {
       "sea_area_fraction": {
         "range": [

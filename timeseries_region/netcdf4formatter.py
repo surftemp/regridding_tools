@@ -31,8 +31,8 @@ class NetCDF4Formatter(object):
         :param lat_min:  minimum latitude of box, must be aligned on 0.05 degree boundary
         :param lon_max:  maximum longitude of box, must be aligned on 0.05 degree boundary
         :param lat_max:  maximum latitude of box, must be aligned on 0.05 degree boundary
-        :param comment: an extra string to add to the output file metadata
-        :param header: 
+        :param comment: an extra string to add to the output file metadata comment
+        :param header: main text to use in the output file metadata comment
         """
         self.output_path = path
         self.time_resolution = time_resolution
@@ -187,7 +187,7 @@ class NetCDF4Formatter(object):
         if self.comment:
             comment += self.comment
 
-        if self.comment:
+        if comment:
             field.nc_set_global_attribute("comment",comment)
 
         return field

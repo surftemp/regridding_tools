@@ -41,10 +41,14 @@ def divides(num,fac):
 
 from test_specs.test1_region_Dec2018_5day_005deg import spec as spec1
 from test_specs.test2_timeseries_Dec2018_5day_5deg import spec as spec2
+from test_specs.test3_JulAug2018_5day_5deg_anom import spec as spec3
+from test_specs.test4_2018_daily_02deg import spec as spec4
+from test_specs.test5_1Q2016_5day_1deg_anom import spec as spec5
+from test_specs.test6_4Q2017_monthly_1deg_nobias import spec as spec6
 
 from test_spec import TestSpec
 
-alltests = [spec1,spec2]
+alltests = [spec1,spec2,spec3,spec4,spec5,spec6]
 
 logger = Logger("verification")
 logger.setLevel(INFO)
