@@ -378,7 +378,6 @@ class SSTRegridder(regridding_utilities.Regridder):
             resampled_sst_uncert_data /= sst_denominator
             if self.sea_ice_fraction:
                 resampled_sif_data /= sif_denominator
-                resampled_sif_data.filled(fill_value=0.0, inplace=True)
             if self.anomalies:
                 resampled_sst_climatology_data /= sst_denominator
                 resampled_sst_data -= resampled_sst_climatology_data
