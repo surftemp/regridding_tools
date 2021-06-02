@@ -19,30 +19,38 @@
 """
 """
 
-import os.path
-import datetime
-import sys
-from logging import Logger, INFO, DEBUG, StreamHandler, Formatter
+import xarray as xr
 import zarr
-import math
+import s3fs
 
 def zdump(path):
-    ds = zarr.open(path)
+    if path.startswith("s3:"):
+        s3 = s3fs.S3FileSystem(anon=False)
+        store = s3fs.S3Map(root=path, s3=s3, create=False)
+    else:
+        store = path
+    zarr_ds = xr.open_zarr(store=store)
+    print(zarr_ds)
+    for v in zarr_ds.variables:
+        print(zarr_ds[v])
+
+    ds = zarr.open(store=store)
     print(ds.info)
     for key in ds.attrs:
         print("\t%s => %s"%(key,str(ds.attrs[key])))
+
     print(ds.tree())
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--file',
+    parser.add_argument('--path',
                         type=str,
-                        help='Specify the location of zarr file',default="/tmp/2018.zarr")
+                        help='Specify the location of zarr file',default="s3://surftemp.sst/zarr/2018.zarr")
 
     args = parser.parse_args()
 
-    zdump(args.file)
+    zdump(args.path)
 
 

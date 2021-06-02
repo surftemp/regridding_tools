@@ -25,11 +25,18 @@ import datetime
 import sys
 from logging import Logger, INFO, DEBUG, StreamHandler, Formatter
 import zarr
-import math
-from collections import defaultdict
+import s3fs
 
 from numcodecs import Zstd
-compressor=Zstd(level=1)
+compressor=Zstd(level=3)
+
+
+# for S3 see https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html
+# access token and secret key need to be in a file ~/.aws/credentials, like:
+#
+# [default]
+# aws_access_key_id=<access-key>
+# aws_secret_access_key=<access-secret>
 
 import xarray as xr
 import numpy as np
@@ -38,14 +45,12 @@ DEFAULT_SST_CCI_ANALYSIS_L4_PATH = "/Users/cv922550/Data/sst/data/CDR_v2/Analysi
 DEFAULT_C3S_SST_ANALYSIS_L4_PATH = "/Users/cv922550/Data/sst/data/ICDR_v2/Analysis/L4/v2.0/"  # "/neodc/c3s_sst/data/ICDR_v2/Analysis/L4/v2.0/"
 DEFAULT_SST_CCI_CLIMATOLOGY_PATH = "/Users/cv922550/Data/sst/data/CDR_v2/Climatology/L4/v2.1/"  # "/neodc/esacci/sst/data/CDR_v2/Climatology/L4/v2.1/"
 
-DEFAULT_OUTPUT_FOLDER="/tmp" # "/group_workspaces/jasmin2/nceo_uor/niall/reslice"
-
-INPUT_RESOLUTION=0.05
+DEFAULT_OUTPUT_FOLDER="/Users/cv922550/Data" # "/group_workspaces/jasmin2/nceo_uor/niall/reslice"
 
 sst_field_names = ['analysed_sst', 'analysis_uncertainty', 'sea_ice_fraction']
 climatology_field_names = ['sea_water_temperature']
 
-logger = Logger("reslicer")
+logger = Logger("publisher")
 logger.setLevel(INFO)
 sh = StreamHandler(sys.stdout)
 formatter = Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -78,46 +83,38 @@ class Publisher(object):
         else:
             days = 365 if year == "climatology" else self.getDaysInYear(year)
 
-        chunk_size_days = self.chunk_size[0]
+        chunk_size_time = self.chunk_size[0]
+        chunk_size_lat = self.chunk_size[1]
+        chunk_size_lon = self.chunk_size[2]
 
         if year == "climatology":
             field_names = climatology_field_names
         else:
             field_names = sst_field_names
 
-        path = os.path.join(output_parent_folder,str(year)+".zarr")
+        path = output_parent_folder + "/" + str(year)+".zarr"
 
-        rootgroup = zarr.open(path, mode='w')
-        datasets = {}
-        for field_name in field_names:
-            datasets[field_name] = rootgroup.create_dataset(field_name,shape=(days,3600,7200),chunks=self.chunk_size, compressor=compressor, dtype='f4')
-
-        logger.info("Starting reslicing for year %s"%(str(year)))
+        logger.info("Starting publication for year %s"%(str(year)))
 
         day = 0
-        self.resetProgress()
+        appends = 0
 
         premature_end_of_data = False
         days_processed = 0
-
-        attrs = {}
-        field_attrs = {}
 
         if year == 1981:
             day = 243 # only data from september 1st
 
         while day < days:
             chunk_day = 0
-            chunk_data = defaultdict(lambda :[])
-            while (chunk_day < chunk_size_days) and (not premature_end_of_data):
+            chunk_paths = []
+            while (chunk_day < chunk_size_time) and (not premature_end_of_data):
                 if day + chunk_day >= days:
                     break
                 if year == "climatology":
                     dt = datetime.datetime(2018, 1, 1) + datetime.timedelta(day+chunk_day)
                 else:
                     dt = datetime.datetime(year, 1, 1) + datetime.timedelta(day+chunk_day)
-
-                self.reportProgress(day,days,"reslice_days IN")
 
                 if year == "climatology":
                     in_path = os.path.join(self.climatology_folder,"D%03d-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc"%(1+day+chunk_day))
@@ -136,61 +133,30 @@ class Publisher(object):
                     break
 
                 logger.debug("reading %s"%(in_path))
-                ds = xr.open_dataset(in_path)
-                print(ds)
-                if len(attrs) == 0:
-                    for key in ds.attrs:
-                        attrs[key] = ds.attrs[key]
-                else:
-                    for key in ds.attrs:
-                        if key in attrs:
-                            if attrs[key] != ds.attrs[key]:
-                                print(key,attrs[key])
-                                del attrs[key]
-
-                for field_name in field_names:
-                    if field_name not in field_attrs:
-                        field_attrs[field_name] = {}
-                        for key in ds[field_name].attrs:
-                            field_attrs[field_name][key] = ds[field_name].attrs[key]
-                    else:
-                        for key in ds[field_name].attrs:
-                            if key in field_attrs[field_name]:
-                                if field_attrs[field_name][key] != ds[field_name].attrs[key]:
-                                    del field_attrs[field_name][key]
-                    a = ds[field_name].data
-                    a = np.ma.filled(a,math.nan)
-                    a = a.reshape(1, 3600, 7200)
-                    chunk_data[field_name].append(a)
+                chunk_paths.append(in_path)
                 chunk_day += 1
                 days_processed += 1
+
+            # AWS S3 path
+            if path.startswith("s3:"):
+                s3_path = path
+                # Initilize the S3 file system
+                s3 = s3fs.S3FileSystem(anon=False)
+                store = s3fs.S3Map(root=s3_path, s3=s3, create=True)
+            else:
+                store = path
+
+            if len(chunk_paths):
+                ds = xr.open_mfdataset(chunk_paths,combine='by_coords').chunk({"time":chunk_size_time,"lat":chunk_size_lat, "lon":chunk_size_lon})
+                ds.to_zarr(store=store,append_dim="time", encoding={} if appends > 0 else {field_name:{"compressor":compressor} for field_name in field_names})
                 ds.close()
+                appends += 1
 
-            for field_name in field_names:
-                chunk = np.concatenate(chunk_data[field_name], axis=0)
-                datasets[field_name][day:day+chunk.shape[0], :, :] = chunk
-
-            day += chunk_size_days
-
-        for key in attrs:
-            rootgroup.attrs[key] = make_json_compliant(attrs[key])
-
-        for field_name in field_attrs:
-            for key in field_attrs[field_name]:
-                datasets[field_name].attrs[key] = make_json_compliant(field_attrs[field_name][key])
+            day += len(chunk_paths)
 
         partial_or_complete = "partial" if premature_end_of_data else "complete"
         logger.info("Completed %s reslicing for year %s to %s (processed %d days)"%(partial_or_complete,str(year),path,days_processed))
 
-
-    def resetProgress(self):
-        self.pct = None
-
-    def reportProgress(self,n,total,label):
-        pct = int((100 * n)/total)
-        if self.pct is None or pct != self.pct:
-            logger.info("%s progress %d percent" % (label,pct))
-            self.pct = pct
 
     @staticmethod
     def getDaysInYear(year):
@@ -231,12 +197,12 @@ if __name__ == '__main__':
                         dest='chunk_size',
                         type=str,
                         help='resolution of chunks, in format "days,degrees-lat,degrees-lon"',
-                        default="7,360,720")
+                        default="2,360,720")
 
     parser.add_argument('--output-folder', action='store',
                         dest='output_folder',
                         type=str,
-                        help='Specify the location of output files',
+                        help='Specify the location of output files, either local filesystem or s3://bucket/folder',
                         default=DEFAULT_OUTPUT_FOLDER)
 
     parser.add_argument('--first_days_only', type=int,
