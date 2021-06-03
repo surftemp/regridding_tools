@@ -26,10 +26,10 @@ import sys
 from logging import Logger, INFO, DEBUG, StreamHandler, Formatter
 import zarr
 import s3fs
+import sys
 
 from numcodecs import Zstd
 compressor=Zstd(level=3)
-
 
 # for S3 see https://docs.aws.amazon.com/general/latest/gr/aws-sec-cred-types.html
 # access token and secret key need to be in a file ~/.aws/credentials, like:
@@ -45,10 +45,11 @@ DEFAULT_SST_CCI_ANALYSIS_L4_PATH = "/Users/cv922550/Data/sst/data/CDR_v2/Analysi
 DEFAULT_C3S_SST_ANALYSIS_L4_PATH = "/Users/cv922550/Data/sst/data/ICDR_v2/Analysis/L4/v2.0/"  # "/neodc/c3s_sst/data/ICDR_v2/Analysis/L4/v2.0/"
 DEFAULT_SST_CCI_CLIMATOLOGY_PATH = "/Users/cv922550/Data/sst/data/CDR_v2/Climatology/L4/v2.1/"  # "/neodc/esacci/sst/data/CDR_v2/Climatology/L4/v2.1/"
 
-DEFAULT_OUTPUT_FOLDER="/Users/cv922550/Data" # "/group_workspaces/jasmin2/nceo_uor/niall/reslice"
+DEFAULT_OUTPUT_PATH="/Users/cv922550/Data/test.zarr" # "/group_workspaces/jasmin2/nceo_uor/niall/reslice"
 
-sst_field_names = ['analysed_sst', 'analysis_uncertainty', 'sea_ice_fraction']
-climatology_field_names = ['sea_water_temperature']
+cci_sst_field_names = ['analysed_sst', 'analysed_sst_uncertainty', 'sea_ice_fraction', 'mask']
+c3s_sst_field_names = ['analysed_sst', 'analysis_uncertainty', 'sea_ice_fraction', 'mask']
+climatology_field_names = ['analysed_sst', 'sea_ice_fraction', 'mask']
 
 logger = Logger("publisher")
 logger.setLevel(INFO)
@@ -56,13 +57,6 @@ sh = StreamHandler(sys.stdout)
 formatter = Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 sh.setFormatter(formatter)
 logger.addHandler(sh)
-
-def make_json_compliant(v):
-    if isinstance(v, np.int32) or isinstance(v, np.int16) or isinstance(v, np.int8):
-        v = int(v)
-    elif isinstance(v, np.float32):
-        v = float(v)
-    return v
 
 class Publisher(object):
 
@@ -76,87 +70,154 @@ class Publisher(object):
         self.climatology_folder = climatology_folder
         self.chunk_size = chunk_size
 
-    def publish(self,output_parent_folder,year,first_days_only=None):
+    def publish(self,path,start_year,end_year,first_days_only=None):
 
-        if first_days_only is not None:
-            days = first_days_only
+        climatology = True if start_year is None else False
+
+        creating = True
+
+        if climatology:
+            start_year = 0
+            end_year = 0
+
+        if path.startswith("s3:"):
+            s3 = s3fs.S3FileSystem(anon=False)
+            store = s3fs.S3Map(root=path, s3=s3, create=False)
         else:
-            days = 365 if year == "climatology" else self.getDaysInYear(year)
+            store = path
 
-        chunk_size_time = self.chunk_size[0]
-        chunk_size_lat = self.chunk_size[1]
-        chunk_size_lon = self.chunk_size[2]
+        if not climatology:
+            try:
+                ds = zarr.open(store=store,mode="r")
+                print(ds.info)
+                print(ds.tree())
+                creating = False
+                for key in ds.attrs:
+                    print(key,ds.attrs[key])
+                # get start and end times encoded as YYYYMMDDT000000Z
+                start_time = ds.attrs["start_time"]
+                end_time = ds.attrs["stop_time"]
+                current_end_year = int(end_time[0:4])-1 # the stored value should be Jan 1 00:00:00 of the year following the last added data
+                logger.info("Appending to existing zarr store covering (%s - %s)"%(start_time,end_time))
+                if current_end_year+1 != start_year:
+                    logger.error("Error, please append from year %d"%(current_end_year+1))
+                    sys.exit(-1)
 
-        if year == "climatology":
-            field_names = climatology_field_names
-        else:
-            field_names = sst_field_names
+            except zarr.errors.PathNotFoundError:
+                start_time = "%04d0101T000000Z"%(start_year)
+                logger.info("No existing zarr store to append to")
 
-        path = output_parent_folder + "/" + str(year)+".zarr"
-
-        logger.info("Starting publication for year %s"%(str(year)))
-
-        day = 0
-        appends = 0
-
-        premature_end_of_data = False
-        days_processed = 0
-
-        if year == 1981:
-            day = 243 # only data from september 1st
-
-        while day < days:
-            chunk_day = 0
-            chunk_paths = []
-            while (chunk_day < chunk_size_time) and (not premature_end_of_data):
-                if day + chunk_day >= days:
-                    break
-                if year == "climatology":
-                    dt = datetime.datetime(2018, 1, 1) + datetime.timedelta(day+chunk_day)
-                else:
-                    dt = datetime.datetime(year, 1, 1) + datetime.timedelta(day+chunk_day)
-
-                if year == "climatology":
-                    in_path = os.path.join(self.climatology_folder,"D%03d-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc"%(1+day+chunk_day))
-                elif year < 2017:
-                    in_path = os.path.join(self.input_cci_folder,str(year),"%02d"%(dt.month),"%02d"%(dt.day),
-                        "%s-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000")))
-                else:
-                    in_path = os.path.join(self.input_c3s_folder,str(year),"%02d"%(dt.month),"%02d"%(dt.day),
-                                               "%s-C3S-L4_GHRSST-SSTdepth-OSTIA-GLOB_ICDR2.0-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000")))
-
-                if not os.path.exists(in_path):
-                    msg = "could not locate input file %s"%(in_path)
-                    logger.warning(msg)
-                    # NOTE - not a problem if the data does not exist for the year
-                    premature_end_of_data = True
-                    break
-
-                logger.debug("reading %s"%(in_path))
-                chunk_paths.append(in_path)
-                chunk_day += 1
-                days_processed += 1
-
-            # AWS S3 path
-            if path.startswith("s3:"):
-                s3_path = path
-                # Initilize the S3 file system
-                s3 = s3fs.S3FileSystem(anon=False)
-                store = s3fs.S3Map(root=s3_path, s3=s3, create=True)
+        for year in range(start_year,end_year+1):
+            if climatology:
+                field_names = climatology_field_names
             else:
-                store = path
+                if year < 2017:
+                    field_names = cci_sst_field_names
+                else:
+                    field_names = c3s_sst_field_names
 
-            if len(chunk_paths):
-                ds = xr.open_mfdataset(chunk_paths,combine='by_coords').chunk({"time":chunk_size_time,"lat":chunk_size_lat, "lon":chunk_size_lon})
-                ds.to_zarr(store=store,append_dim="time", encoding={} if appends > 0 else {field_name:{"compressor":compressor} for field_name in field_names})
-                ds.close()
-                appends += 1
+            if first_days_only is not None:
+                days = first_days_only
+            else:
+                days = 365 if climatology else self.getDaysInYear(year)
 
-            day += len(chunk_paths)
+            chunk_size_time = self.chunk_size[0]
+            chunk_size_lat = self.chunk_size[1]
+            chunk_size_lon = self.chunk_size[2]
 
-        partial_or_complete = "partial" if premature_end_of_data else "complete"
-        logger.info("Completed %s reslicing for year %s to %s (processed %d days)"%(partial_or_complete,str(year),path,days_processed))
+            logger.info("Starting publication for year %s"%(str(year)))
 
+            day = 0
+
+            premature_end_of_data = False
+            days_processed = 0
+
+            if year == 1981:
+                day = 243 # only data from september 1st
+
+            while day < days:
+                chunk_day = 0
+                chunk_paths = []
+                while (chunk_day < chunk_size_time) and (not premature_end_of_data):
+                    if day + chunk_day >= days:
+                        break
+                    if climatology:
+                        dt = datetime.datetime(2018, 1, 1) + datetime.timedelta(day+chunk_day)
+                    else:
+                        dt = datetime.datetime(year, 1, 1) + datetime.timedelta(day+chunk_day)
+
+                    if climatology:
+                        in_path = os.path.join(self.climatology_folder,"D%03d-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc"%(1+day+chunk_day))
+                    elif year < 2017:
+                        in_path = os.path.join(self.input_cci_folder,str(year),"%02d"%(dt.month),"%02d"%(dt.day),
+                            "%s-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000")))
+                    else:
+                        in_path = os.path.join(self.input_c3s_folder,str(year),"%02d"%(dt.month),"%02d"%(dt.day),
+                                                   "%s-C3S-L4_GHRSST-SSTdepth-OSTIA-GLOB_ICDR2.0-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000")))
+
+                    if not os.path.exists(in_path):
+                        msg = "could not locate input file %s"%(in_path)
+                        logger.warning(msg)
+                        # NOTE - not a problem if the data does not exist for the year
+                        premature_end_of_data = True
+                        break
+
+                    logger.debug("reading %s"%(in_path))
+                    chunk_paths.append(in_path)
+                    chunk_day += 1
+                    days_processed += 1
+
+                # AWS S3 path
+                if path.startswith("s3:"):
+                    s3 = s3fs.S3FileSystem(anon=False)
+                    store = s3fs.S3Map(root=path, s3=s3, create=True)
+                else:
+                    store = path
+
+                if len(chunk_paths):
+                    if creating:
+                        ds = xr.open_dataset(chunk_paths[0]).chunk(
+                            {"time": chunk_size_time, "lat": chunk_size_lat, "lon": chunk_size_lon})
+                        for name in list(ds.variables):
+                            if name != "lat_bnds" and name != "lon_bnds":
+                                del ds[name]
+                        ds.to_zarr(store=store, mode="w")
+                        ds.close()
+
+
+                    ds = xr.open_mfdataset(chunk_paths, combine='by_coords').chunk(
+                        {"time": chunk_size_time, "lat": chunk_size_lat, "lon": chunk_size_lon})
+
+                    if "lat_bnds" in ds:
+                        del ds["lat_bnds"]
+                    if "lon_bnds" in ds:
+                        del ds["lon_bnds"]
+
+                    if creating:
+                        ds.to_zarr(store=store,mode="a", encoding={field_name:{"compressor":compressor} for field_name in field_names})
+                    else:
+                        ds.to_zarr(store=store,mode="a", append_dim="time",
+                                   encoding={})
+
+                    ds.close()
+                    logger.debug("Appended data to zarr store %s" % (path))
+                    creating = False
+
+                day += len(chunk_paths)
+
+            partial_or_complete = "partial" if premature_end_of_data else "complete"
+            logger.info("Completed %s publication for year %s to %s (processed %d days)"%(partial_or_complete,str(year),path,days_processed))
+
+        if not climatology:
+            try:
+                ds = zarr.open(store=store,mode="a")
+                ds.attrs["start_time"] = start_time
+                ds.attrs["time_coverage_start"] = start_time
+                stop_time = "%04d0101T000000Z"%(end_year+1)
+                ds.attrs["stop_time"] = stop_time
+                ds.attrs["time_coverage_end"] = stop_time
+            except Exception as ex:
+                print(ex)
 
     @staticmethod
     def getDaysInYear(year):
@@ -186,27 +247,36 @@ if __name__ == '__main__':
                         help='Specify the location of input climatology files',
                         default=DEFAULT_SST_CCI_CLIMATOLOGY_PATH)
 
-    parser.add_argument('--year', action='store',
-                        dest='year',
-                        type=str,
-                        help='Specify the year for reslicing SST data',
-                        metavar="YEAR",
-                        default="2018")
+    parser.add_argument('--climatology', action='store_true',
+                        dest='climatology',
+                        help='Run the climatology')
 
-    parser.add_argument('--chunk_size', action='store',
+    parser.add_argument('--start-year', action='store',
+                        dest='start_year',
+                        type=int,
+                        help='Specify the start year for reslicing SST data',
+                        metavar="YEAR")
+
+    parser.add_argument('--end-year', action='store',
+                        dest='end_year',
+                        type=int,
+                        help='Specify the end year for reslicing SST data',
+                        metavar="YEAR")
+
+    parser.add_argument('--chunk-size', action='store',
                         dest='chunk_size',
                         type=str,
-                        help='resolution of chunks, in format "days,degrees-lat,degrees-lon"',
-                        default="2,360,720")
+                        help='resolution of chunks, in format "days-size,lat-size,lon-size"',
+                        default="7,100,100")
 
-    parser.add_argument('--output-folder', action='store',
-                        dest='output_folder',
+    parser.add_argument('--output-path', action='store',
+                        dest='output_path',
                         type=str,
-                        help='Specify the location of output files, either local filesystem or s3://bucket/folder',
-                        default=DEFAULT_OUTPUT_FOLDER)
+                        help='Specify the location of output zarr data, either local filesystem or s3://bucket/folder/filename.zarr',
+                        default=DEFAULT_OUTPUT_PATH)
 
-    parser.add_argument('--first_days_only', type=int,
-                        help='for testing, include only this many days from the start of the year',
+    parser.add_argument('--first-days-only', type=int,
+                        help='for testing, include only this many days from the start of each year',
                         default=None)
 
     parser.add_argument('--verbose', action='store_true',
@@ -218,16 +288,15 @@ if __name__ == '__main__':
         logger.setLevel(DEBUG)
 
     chunk_size = tuple(map(lambda n:int(n),args.chunk_size.split(",")))
-    publisher = Publisher(args.input_cci, args.input_c3s, args.climatology_folder,chunk_size)
+    publisher = Publisher(args.input_cci, args.input_c3s, args.climatology_folder, chunk_size)
 
-    if not args.year:
-        logger.warning("Please specify --year <YEAR> or --year climatology.")
+    if not args.climatology and (not args.start_year or not args.end_year):
+        logger.warning("Please specify EITHER (--start-year <YEAR> AND --end-year <YEAR>) OR --climatology.")
         sys.exit(-1)
 
-    year = args.year
-    if year != "climatology":
-        year = int(year)
+    start_year = None if args.climatology else args.start_year
+    end_year = None if args.climatology else args.end_year
 
-    publisher.publish(args.output_folder,year,args.first_days_only)
+    publisher.publish(args.output_path,start_year,end_year,args.first_days_only)
 
 

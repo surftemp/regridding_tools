@@ -23,23 +23,32 @@ import xarray as xr
 import zarr
 import s3fs
 
-def zdump(path):
-    if path.startswith("s3:"):
-        s3 = s3fs.S3FileSystem(anon=False)
-        store = s3fs.S3Map(root=path, s3=s3, create=False)
-    else:
-        store = path
-    zarr_ds = xr.open_zarr(store=store)
+import matplotlib.pyplot as plt
+
+def zdump(path,plotvar,outpath):
+    print(path)
+
+    zarr_ds = xr.open_zarr(path)
+
     print(zarr_ds)
-    for v in zarr_ds.variables:
-        print(zarr_ds[v])
 
-    ds = zarr.open(store=store)
-    print(ds.info)
-    for key in ds.attrs:
-        print("\t%s => %s"%(key,str(ds.attrs[key])))
+    if plotvar:
+        plotvar = plotvar.split(":")
+        name = plotvar[0]
+        time = int(plotvar[1])
+        lat_start = int(plotvar[2])
+        lat_end = int(plotvar[3])
+        lon_start = int(plotvar[4])
+        lon_end = int(plotvar[5])
+        zarr_ds[name].isel(time=time,lat=range(lat_start,lat_end),lon=range(lon_start,lon_end)).plot()
+        plt.show()
 
-    print(ds.tree())
+    if outpath:
+        from numcodecs import Zstd
+        encoding = {}
+        for name in zarr_ds.variables:
+            encoding[name] = {"zlib": True, "complevel": 3}
+        zarr_ds.to_netcdf(outpath,encoding=encoding)
 
 if __name__ == '__main__':
     import argparse
@@ -49,8 +58,16 @@ if __name__ == '__main__':
                         type=str,
                         help='Specify the location of zarr file',default="s3://surftemp.sst/zarr/2018.zarr")
 
+    parser.add_argument('--plot',
+                        type=str,
+                        help='Specify the name of a variable to plot', default="analysed_sst:0:1000:1200:2000:2200")
+
+    parser.add_argument('--output-path',
+                        type=str,
+                        help='Specify the location of a netcdf4 file to dump data to', default="")
+
     args = parser.parse_args()
 
-    zdump(args.path)
+    zdump(args.path,args.plot,args.output_path)
 
 
