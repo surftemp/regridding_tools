@@ -267,7 +267,7 @@ if __name__ == '__main__':
                         dest='chunk_size',
                         type=str,
                         help='resolution of chunks, in format "days-size,lat-size,lon-size"',
-                        default="7,100,100")
+                        default="5,360,720")
 
     parser.add_argument('--output-path', action='store',
                         dest='output_path',
