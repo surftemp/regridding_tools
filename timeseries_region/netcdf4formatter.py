@@ -225,10 +225,16 @@ class NetCDF4Formatter(object):
         sst_or_anomaly_field = self.createField(ssts_or_anomalies,
                     "sst_anomaly" if self.output_anomaly else "sst",
                     "sea_water_temperature_anomaly" if self.output_anomaly else "sea_water_temperature","K")
+        sst_or_anomaly_field._FillValue = -32768.0
+
         uncertainty_field = self.createField(uncertainties, "sst_uncertainty", "sea_water_temperature uncertainty","K")
+        uncertainty_field._FillValue = -32768.0
+
         fields = [year_field,month_field,day_field,doy_field,sst_or_anomaly_field,uncertainty_field]
+
         if self.output_sea_ice:
             sea_ice_field = self.createField(sea_ice_fractions, "sea_ice_area_fraction", "sea_ice_area_fraction","K")
+            sea_ice_field.__FillValue = -32768.0
             fields.append(sea_ice_field)
 
         # write out to file
