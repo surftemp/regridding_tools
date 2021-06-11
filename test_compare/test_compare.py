@@ -515,24 +515,19 @@ if __name__ == '__main__':
                         default="/tmp",
                         help='specify parent folder for storing results')
 
-    SST_CCI_ANALYSIS_L4_PATH = "/Users/cv922550/Data/sst/data/CDR_v2/Analysis/L4/v2.1/"
-    C3S_SST_ANALYSIS_L4_PATH = "/Users/cv922550/Data/sst/data/ICDR_v2/Analysis/L4/v2.0/"
-    SST_CCI_CLIMATOLOGY_PATH = "/Users/cv922550/Data/sst/data/CDR_v2/Climatology/L4/v2.1/"
-    RESLICE_PATH = "/Users/cv922550/Data/reslice/"
-
-    parser.add_argument('--reslice_path', default="/Users/cv922550/Data/reslice/",
+    parser.add_argument('--reslice_path', default="/gws/nopw/j04/nceo_uor/niall/reslice",
                         help='Path to the resliced SST C3S/CCI Analysis Level 4 input data.')
 
-    parser.add_argument('--cci_path', default="/Users/cv922550/Data/sst/data/CDR_v2/Analysis/L4/v2.1/",
+    parser.add_argument('--cci_path', default="/neodc/esacci/sst/data/CDR_v2/Analysis/L4/v2.1/",
                         help='Path to the SST CCI Analysis Level 4 input data.')
 
-    parser.add_argument('--c3s_path', default="/Users/cv922550/Data/sst/data/ICDR_v2/Analysis/L4/v2.0/",
+    parser.add_argument('--c3s_path', default="/neodc/c3s_sst/data/ICDR_v2/Analysis/L4/v2.0/",
                         help='Path to the SST C3S Analysis Level 4 input data.')
 
-    parser.add_argument('--climatology_path', default="/Users/cv922550/Data/sst/data/CDR_v2/Climatology/L4/v2.1/",
+    parser.add_argument('--climatology_path', default="/neodc/esacci/sst/data/CDR_v2/Climatology/L4/v2.1/",
                         help='Path to the SST Climatology Analysis Level 4 input data.')
 
-    parser.add_argument('--python_exe', default="/Users/cv922550/miniconda3/envs/cfpy37/bin/python",
+    parser.add_argument('--python_exe', default="home/users/niallmcc/.conda/envs/cfpy37/bin/python",
                         help='Path to the python executable.')
 
     args = parser.parse_args()

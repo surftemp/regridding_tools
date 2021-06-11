@@ -36,7 +36,7 @@ DEFAULT_SST_CCI_ANALYSIS_L4_PATH = "/neodc/esacci/sst/data/CDR_v2/Analysis/L4/v2
 DEFAULT_C3S_SST_ANALYSIS_L4_PATH = "/neodc/c3s_sst/data/ICDR_v2/Analysis/L4/v2.0/"
 DEFAULT_SST_CCI_CLIMATOLOGY_PATH = "/neodc/esacci/sst/data/CDR_v2/Climatology/L4/v2.1/"
 
-DEFAULT_OUTPUT_FOLDER="/group_workspaces/jasmin2/nceo_uor/niall/reslice"
+DEFAULT_OUTPUT_FOLDER="/gws/nopw/j04/nceo_uor/niall/reslice"
 
 INPUT_RESOLUTION=0.05
 
