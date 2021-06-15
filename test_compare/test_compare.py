@@ -27,7 +27,7 @@ import argparse
 import os.path
 import csv
 import glob
-
+import shutil
 import cf
 import sys
 import numpy as np
@@ -323,8 +323,9 @@ class TestRunner(object):
             try:
                 self.runRegridTest(name,spec,regrid_folder)
             except Exception as ex:
-                os.rmdir(regrid_folder)
                 print(ex)
+                shutil.rmtree(regrid_folder)
+                raise ex
 
         # if os.path.exists(regrid_folder):
         #    self.checkRegridResults(name,regrid_folder,test["expected"])
@@ -340,7 +341,8 @@ class TestRunner(object):
                 try:
                     self.runRegionTest(name,min_lon,min_lat,max_lon,max_lat,spec,region_folder)
                 except Exception as ex:
-                    region_tests.append(str(ex))
+                    print(ex)
+                    shutil.rmtree(region_folder)
                     raise ex
 
             if os.path.exists(region_folder):
@@ -366,7 +368,10 @@ class TestRunner(object):
                     try:
                         self.runTimeSeriesTest(name, lon, lat, spec, output_format,timeseries_folder)
                     except Exception as ex:
+                        print(ex)
+                        shutil.rmtree(region_folder)
                         raise ex
+
                 if os.path.exists(timeseries_folder):
                     self.checkTimeSeriesResults(name, lon, lat, lon_step, lat_step, timeseries_folder, output_format, spec, test["expected"])
                     timeseries_tests.append((lon, lat, glob.glob(timeseries_folder+"/*")[0]))
@@ -512,7 +517,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--folder', action='store',
                         type=str,
-                        default="/tmp",
+                        default="/home/users/niallmcc/github/regridding_tools/test_compare",
                         help='specify parent folder for storing results')
 
     parser.add_argument('--reslice_path', default="/gws/nopw/j04/nceo_uor/niall/reslice",
@@ -527,7 +532,7 @@ if __name__ == '__main__':
     parser.add_argument('--climatology_path', default="/neodc/esacci/sst/data/CDR_v2/Climatology/L4/v2.1/",
                         help='Path to the SST Climatology Analysis Level 4 input data.')
 
-    parser.add_argument('--python_exe', default="home/users/niallmcc/.conda/envs/cfpy37/bin/python",
+    parser.add_argument('--python_exe', default="/home/users/niallmcc/miniconda3/envs/cfpy37a/bin/python",
                         help='Path to the python executable.')
 
     args = parser.parse_args()
