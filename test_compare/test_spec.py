@@ -122,11 +122,11 @@ class TestSpec(object):
             cmdline_out = (positionals+kwargs, output_file_name)
 
         if job_type == TestSpec.JOB_TYPE_REGRID:
-            script_path = "/Users/cv922550/github/regridding_tools/global_regridding/makegriddedSSTs.py"
+            script_path = "../global_regridding/makegriddedSSTs.py"
         elif job_type == TestSpec.JOB_TYPE_TIMESERIES:
-            script_path = "/Users/cv922550/github/regridding_tools/timeseries_region/maketimeseriesSSTs.py"
+            script_path = "../timeseries_region/maketimeseriesSSTs.py"
         elif job_type == TestSpec.JOB_TYPE_REGION:
-            script_path = "/Users/cv922550/github/regridding_tools/timeseries_region/makeregionSSTs.py"
+            script_path = "../timeseries_region/makeregionSSTs.py"
         else:
             raise Exception("Invalid job type: "+job_type)
 
