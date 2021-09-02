@@ -1,0 +1,16 @@
+
+Proposal for a AWS Opendata Tutorial - Analysing Marine Heatwaves.
+
+In this tutorial we will cover:
+
+(0) introduce the sea surface temperature (SST) dataset hosted on AWS opendata
+
+(1) setting up a python client environment for exploring the data, based on zarr / xarray / matplotlib / jupyter etc.  Examples given for pip and conda environments.  This prepares the reader for the main part of the tutorial.
+
+(2) provide a basic example of how to connect to the data hosted on AWS opendata and plot it - L4 global sea surface temperatures on a particular day.  This example will show that it is easy to access the data hosted on AWS in a couple of lines of python using the xarray library.
+
+(3) give a brief introduction to marine heatwaves, their significance, and conventions for identifying them
+
+(4) provide a worked example of analysing the data hosted on AWS opendata to find occurences of marine heatwaves for a specific spatial extent and time period, and plot the data.  This example will exploit the fact that zarr data storage allows only the required spatial subset of the data to be efficiently accessed.
+
+The tutorial will be provided in the form of a jupyter notebook that the reader can download and run.
