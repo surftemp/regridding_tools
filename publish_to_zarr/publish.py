@@ -41,11 +41,11 @@ compressor=Zstd(level=3)
 import xarray as xr
 import numpy as np
 
-DEFAULT_SST_CCI_ANALYSIS_L4_PATH = "/Users/cv922550/Data/sst/data/CDR_v2/Analysis/L4/v2.1"  # "/neodc/esacci/sst/data/CDR_v2/Analysis/L4/v2.1"
-DEFAULT_C3S_SST_ANALYSIS_L4_PATH = "/Users/cv922550/Data/sst/data/ICDR_v2/Analysis/L4/v2.0/"  # "/neodc/c3s_sst/data/ICDR_v2/Analysis/L4/v2.0/"
-DEFAULT_SST_CCI_CLIMATOLOGY_PATH = "/Users/cv922550/Data/sst/data/CDR_v2/Climatology/L4/v2.1/"  # "/neodc/esacci/sst/data/CDR_v2/Climatology/L4/v2.1/"
+DEFAULT_SST_CCI_ANALYSIS_L4_PATH = "/neodc/esacci/sst/data/CDR_v2/Analysis/L4/v2.1"
+DEFAULT_C3S_SST_ANALYSIS_L4_PATH = "/neodc/c3s_sst/data/ICDR_v2/Analysis/L4/v2.0/"
+DEFAULT_SST_CCI_CLIMATOLOGY_PATH = "/neodc/esacci/sst/data/CDR_v2/Climatology/L4/v2.1/"
 
-DEFAULT_OUTPUT_PATH="/Users/cv922550/Data/test.zarr" # "/group_workspaces/jasmin2/nceo_uor/niall/reslice"
+DEFAULT_OUTPUT_PATH="s3://surftemp-sst/sst.zarr"
 
 cci_sst_field_names = ['analysed_sst', 'analysed_sst_uncertainty', 'sea_ice_fraction', 'mask']
 c3s_sst_field_names = ['analysed_sst', 'analysis_uncertainty', 'sea_ice_fraction', 'mask']

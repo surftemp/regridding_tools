@@ -1,0 +1,5 @@
+xarray
+netcdf4
+zarr
+s3fc
+dask
