@@ -41,9 +41,9 @@ compressor=Zstd(level=3)
 import xarray as xr
 import numpy as np
 
-DEFAULT_SST_CCI_ANALYSIS_L4_PATH = "/neodc/esacci/sst/data/CDR_v2/Analysis/L4/v2.1"
-DEFAULT_C3S_SST_ANALYSIS_L4_PATH = "/neodc/c3s_sst/data/ICDR_v2/Analysis/L4/v2.0/"
-DEFAULT_SST_CCI_CLIMATOLOGY_PATH = "/neodc/esacci/sst/data/CDR_v2/Climatology/L4/v2.1/"
+DEFAULT_SST_CCI_ANALYSIS_L4_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/CDR_v2/Analysis/L4/v2.1"
+DEFAULT_C3S_SST_ANALYSIS_L4_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/ICDR_v2/Analysis/L4/v2.0/"
+DEFAULT_SST_CCI_CLIMATOLOGY_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/CDR_v2/Climatology/L4/v2.1/"
 
 DEFAULT_OUTPUT_PATH="s3://surftemp-sst/sst.zarr"
 
