@@ -47,6 +47,10 @@ DEFAULT_SST_CCI_CLIMATOLOGY_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/CDR_
 DEFAULT_OUTPUT_PATH="s3://surftemp-sst/sst.zarr"
 # DEFAULT_OUTPUT_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/sst.zarr"
 
+# DEFAULT_SST_CCI_ANALYSIS_L4_PATH = "/Users/cv922550/Data/SSt/CDR_v2/Analysis/L4/v2.1"
+# DEFAULT_C3S_SST_ANALYSIS_L4_PATH = "/Users/cv922550/Data/SSt/ICDR_v2/Analysis/L4/v2.0"
+# DEFAULT_OUTPUT_PATH= "/Users/cv922550/Data/SSt/test.zarr"
+
 cci_sst_field_names = ['analysed_sst', 'analysed_sst_uncertainty', 'sea_ice_fraction', 'mask']
 c3s_sst_field_names = ['analysed_sst', 'analysis_uncertainty', 'sea_ice_fraction', 'mask']
 output_field_names = ['analysed_sst', 'analysed_sst_uncertainty', 'sea_ice_fraction', 'mask'] # use CCI names
@@ -121,7 +125,7 @@ class Publisher(object):
 
 
 
-    def publish(self,path,start_year,end_year,first_days_only=None):
+    def publish(self,path,start_year,start_doy,end_year,first_days_only=None):
 
         creating = True
         store = self.open_store(path)
@@ -149,11 +153,6 @@ class Publisher(object):
 
         for year in range(start_year,end_year+1):
 
-            if year < 2017:
-                field_names = cci_sst_field_names
-            else:
-                field_names = c3s_sst_field_names
-
             if first_days_only is not None:
                 days = first_days_only
             else:
@@ -165,7 +164,7 @@ class Publisher(object):
 
             logger.info("Starting publication for year %s"%(str(year)))
 
-            day = 0
+            day = (start_doy-1)
 
             premature_end_of_data = False
             days_processed = 0
@@ -175,11 +174,10 @@ class Publisher(object):
                 elapsed_days = (dt - start_day).days + 1
                 return elapsed_days % chunk_size_time == 0
 
-            if year == 1981:
-                day = 243 # only data from september 1st
+            if start_doy < 243 and year == 1981:
+                day = 243 # only data from september 1st, 1981
 
             while day < days:
-                chunk_day = 0
                 chunk_paths = []
 
                 # collect the next time chunk
@@ -229,6 +227,8 @@ class Publisher(object):
                         del ds["lat_bnds"]
                     if "lon_bnds" in ds:
                         del ds["lon_bnds"]
+                    if "time_bnds" in ds:
+                        del ds["time_bnds"]
 
                     if year >= 2017:
                         ds = ds.rename_vars(c3s_rename)
@@ -296,6 +296,13 @@ if __name__ == '__main__':
                         help='Specify the start year for reslicing SST data',
                         metavar="YEAR")
 
+    parser.add_argument('--start-doy', action='store',
+                        dest='start_doy',
+                        type=int,
+                        help='Specify the start day-of-year for reslicing SST data',
+                        metavar="DOY",
+                        default=1)
+
     parser.add_argument('--end-year', action='store',
                         dest='end_year',
                         type=int,
@@ -336,6 +343,6 @@ if __name__ == '__main__':
             logger.warning("Please specify EITHER (--start-year <YEAR> AND --end-year <YEAR>) OR --climatology.")
             sys.exit(-1)
 
-        publisher.publish(args.output_path,args.start_year,args.end_year)
+        publisher.publish(args.output_path,args.start_year,args.start_doy,args.end_year)
 
 

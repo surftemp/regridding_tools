@@ -104,12 +104,15 @@ class Tester(object):
 
         store = self.open_store(path)
 
-        zarr_ds = xr.open_zarr(store,mode="r")
+        zarr_ds = xr.open_zarr(store)
 
         dt = start_dt
         while dt <= end_dt:
             year = dt.year
-            field_names = cci_sst_field_names
+            if year < 2017:
+                field_names = cci_sst_field_names
+            else:
+                field_names = c3s_sst_field_names
 
             test_label = str(dt)
             if year < 2017:
