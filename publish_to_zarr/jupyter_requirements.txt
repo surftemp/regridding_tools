@@ -1,0 +1,4 @@
+xarray
+zarr
+s3fs
+notebook
