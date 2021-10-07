@@ -44,13 +44,15 @@ import numpy as np
 DEFAULT_SST_CCI_ANALYSIS_L4_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/CDR_v2/Analysis/L4/v2.1"
 DEFAULT_C3S_SST_ANALYSIS_L4_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/ICDR_v2/Analysis/L4/v2.0/"
 DEFAULT_SST_CCI_CLIMATOLOGY_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/CDR_v2/Climatology/L4/v2.1/"
+DEFAULT_ORIG_SST_CCI_CLIMATOLOGY_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/CDR_v2/ClimatologyOrig/L4/v2.1/"
 
 DEFAULT_ZARR_PATH = "s3://surftemp-sst/sst.zarr"
 # DEFAULT_ZARR_PATH="/gws/nopw/j04/esacci_sst/users/niallmcc/sst.zarr" # "/group_workspaces/jasmin2/nceo_uor/niall/reslice"
 
 cci_sst_field_names = ['analysed_sst', 'analysed_sst_uncertainty', 'sea_ice_fraction', 'mask']
 c3s_sst_field_names = ['analysed_sst', 'analysis_uncertainty', 'sea_ice_fraction', 'mask']
-climatology_field_names = ['analysed_sst', 'sea_ice_fraction', 'mask']
+climatology_field_names = ['analysed_sst']
+climatology_orig_field_names = ['sea_ice_fraction']
 
 c3s_rename = { 'analysis_uncertainty':'analysed_sst_uncertainty' }
 
@@ -67,10 +69,11 @@ class Tester(object):
     def parseTime(s):
         return datetime.datetime.strptime(s, "%Y%m%dT%H%M%SZ")
 
-    def __init__(self,input_cci_folder,input_c3s_folder,climatology_folder):
+    def __init__(self,input_cci_folder,input_c3s_folder,climatology_folder,climatology_folder_orig):
         self.input_cci_folder = input_cci_folder
         self.input_c3s_folder = input_c3s_folder
         self.climatology_folder = climatology_folder
+        self.climatology_folder_orig = climatology_folder_orig
 
     def open_store(self,path):
         if path.startswith("s3:"):
@@ -83,18 +86,34 @@ class Tester(object):
     def test_climatology(self,path):
 
         store = self.open_store(path)
-        zarr_ds = xr.open_zarr(store, mode="r")
+        zarr_ds = xr.open_zarr(store)
+        print(zarr_ds)
 
         for day in range(0,365):
             in_path = os.path.join(self.climatology_folder,
                                    "D%03d-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc" % (
                                            1 + day))
-            original_ds = xr.open_dataset(in_path)
+            ds = xr.open_dataset(in_path)
+
+            in_path_orig = os.path.join(self.climatology_folder_orig,
+                                   "D%03d-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc" % (
+                                           1 + day))
+            original_ds = xr.open_dataset(in_path_orig)
 
             test_label = "test climatology day %d" % (day)
+            logger.info(test_label)
             for field_name in climatology_field_names:
+                original_arr = ds[field_name].data.reshape((3600,7200))
+                zarr_arr = zarr_ds[field_name].isel(time=day).values
+                logger.debug("testing field %s" % field_name)
+                numpy.testing.assert_almost_equal(original_arr,zarr_arr)
+
+            for field_name in climatology_orig_field_names:
                 original_arr = original_ds[field_name].data.reshape((3600,7200))
-                zarr_arr = zarr_ds[field_name].isel(time=day).data
+                print(original_arr)
+                zarr_arr = zarr_ds[field_name].isel(time=day).values
+                print(zarr_arr)
+                logger.debug("testing field %s" % field_name)
                 numpy.testing.assert_almost_equal(original_arr,zarr_arr)
 
             logger.info("Test %s completed", test_label)
@@ -154,22 +173,28 @@ if __name__ == '__main__':
     parser.add_argument('--input-cci', action='store',
                         dest='input_cci',
                         type=str,
-                        help='Specify the location of input CCI files',
+                        help='Specify the location of dust-corrected input CCI files',
                         default=DEFAULT_SST_CCI_ANALYSIS_L4_PATH)
 
     parser.add_argument('--input-c3s', action='store',
                         dest='input_c3s',
                         type=str,
-                        help='Specify the location of input C3S files',
+                        help='Specify the location of dust-corrected input C3S files',
                         default=DEFAULT_C3S_SST_ANALYSIS_L4_PATH)
 
     parser.add_argument('--input-climatology', action='store',
                         dest='climatology_folder',
                         type=str,
-                        help='Specify the location of input climatology files',
+                        help='Specify the location of dust-corrected input climatology files',
                         default=DEFAULT_SST_CCI_CLIMATOLOGY_PATH)
 
-    parser.add_argument('--zarr_path',
+    parser.add_argument('--input-climatology-orig', action='store',
+                        dest='climatology_folder_orig',
+                        type=str,
+                        help='Specify the location of non dust-corrected input climatology files',
+                        default=DEFAULT_ORIG_SST_CCI_CLIMATOLOGY_PATH)
+
+    parser.add_argument('--zarr-path',
                         dest='zarr_path',
                         help='path/URL to the zarr file',
                         default=DEFAULT_ZARR_PATH)
@@ -200,15 +225,18 @@ if __name__ == '__main__':
     if args.verbose:
         logger.setLevel(DEBUG)
 
-    tester = Tester(args.input_cci, args.input_c3s, args.climatology_folder)
+    tester = Tester(args.input_cci, args.input_c3s, args.climatology_folder, args.climatology_folder_orig)
 
     if not args.climatology and (not args.start_date or not args.end_date):
         logger.warning("Please specify EITHER (--start-year <YEAR> AND --end-year <YEAR>) OR --climatology.")
         sys.exit(-1)
 
-    start_dt = None if args.climatology else (datetime.datetime.strptime(args.start_date,"%Y-%m-%d") + datetime.timedelta(hours=12))
-    end_dt = None if args.climatology else (datetime.datetime.strptime(args.end_date,"%Y-%m-%d") + datetime.timedelta(hours=12))
 
-    tester.test(args.zarr_path,start_dt,end_dt)
+    if args.climatology:
+        tester.test_climatology(args.zarr_path)
+    else:
+        start_dt = datetime.datetime.strptime(args.start_date, "%Y-%m-%d") + datetime.timedelta(hours=12)
+        end_dt = datetime.datetime.strptime(args.end_date, "%Y-%m-%d") + datetime.timedelta(hours=12)
+        tester.test(args.zarr_path,start_dt,end_dt)
 
 

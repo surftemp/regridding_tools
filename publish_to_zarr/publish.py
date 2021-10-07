@@ -39,24 +39,22 @@ compressor=Zstd(level=3)
 # aws_secret_access_key=<access-secret>
 
 import xarray as xr
-import numpy as np
 
 DEFAULT_SST_CCI_ANALYSIS_L4_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/CDR_v2/Analysis/L4/v2.1"
 DEFAULT_C3S_SST_ANALYSIS_L4_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/ICDR_v2/Analysis/L4/v2.0/"
 DEFAULT_SST_CCI_CLIMATOLOGY_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/CDR_v2/Climatology/L4/v2.1/"
-DEFAULT_OUTPUT_PATH="s3://surftemp-sst/sst.zarr"
-# DEFAULT_OUTPUT_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/sst.zarr"
+DEFAULT_ORIG_SST_CCI_CLIMATOLOGY_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/CDR_v2/ClimatologyOrig/L4/v2.1/"
 
-# DEFAULT_SST_CCI_ANALYSIS_L4_PATH = "/Users/cv922550/Data/SSt/CDR_v2/Analysis/L4/v2.1"
-# DEFAULT_C3S_SST_ANALYSIS_L4_PATH = "/Users/cv922550/Data/SSt/ICDR_v2/Analysis/L4/v2.0"
-# DEFAULT_OUTPUT_PATH= "/Users/cv922550/Data/SSt/test.zarr"
+DEFAULT_OUTPUT_PATH="s3://surftemp-sst/sst.zarr"
 
 cci_sst_field_names = ['analysed_sst', 'analysed_sst_uncertainty', 'sea_ice_fraction', 'mask']
 c3s_sst_field_names = ['analysed_sst', 'analysis_uncertainty', 'sea_ice_fraction', 'mask']
 output_field_names = ['analysed_sst', 'analysed_sst_uncertainty', 'sea_ice_fraction', 'mask'] # use CCI names
 c3s_rename = { 'analysis_uncertainty':'analysed_sst_uncertainty'} # rename C3S var to CCI
 
-climatology_field_names = ['analysed_sst', 'sea_ice_fraction', 'mask']
+climatology_field_names = ['analysed_sst']
+climatology_orig_field_names = ['sea_ice_fraction']
+
 
 logger = Logger("publisher")
 logger.setLevel(INFO)
@@ -65,17 +63,51 @@ formatter = Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 sh.setFormatter(formatter)
 logger.addHandler(sh)
 
+def safe_assign(ds, da, name=""):
+    """
+    Attach a DataArray as a variable to a Dataset, working around a bug in xarray when using simple assignment
+    See https://github.com/pydata/xarray/issues/2245 (dimension attributes are sometimes lost)
+
+    Parameters
+    ----------
+    ds: xarray.Dataset
+       the DataSet instance to which the DataArray is to be assigned
+    da: xarray.DataArray
+       the DataArray to assign
+    name: str
+       the name of the variable to assign.  If empty, uses the name of the DataArray.
+
+    Notes
+    -----
+
+    This function is attached to the DataSet class as a method when this module is imported
+    """
+    if name:
+        da.name = name
+
+    # save attribute values from any dimensions also used in the DataArray
+    dim_attrs = {}
+    for dim in ds.dims:
+        if dim in da.dims:
+            dim_attrs[dim] = ds[dim].attrs
+    ds[da.name] = da
+    # restore attribute values that may have been lost
+    for dim in dim_attrs:
+        ds[dim].attrs = dim_attrs[dim]
+
 class Publisher(object):
 
     @staticmethod
     def parseTime(s):
         return datetime.datetime.strptime(s, "%Y%m%dT%H%M%SZ")
 
-    def __init__(self,input_cci_folder,input_c3s_folder,climatology_folder,chunk_size):
+    def __init__(self,input_cci_folder,input_c3s_folder,climatology_folder,climatology_folder_orig,chunk_size,first_days_only):
         self.input_cci_folder = input_cci_folder
         self.input_c3s_folder = input_c3s_folder
         self.climatology_folder = climatology_folder
+        self.climatology_folder_orig = climatology_folder_orig
         self.chunk_size = chunk_size
+        self.first_days_only = None
 
     def open_store(self,path):
         if path.startswith("s3:"):
@@ -97,35 +129,54 @@ class Publisher(object):
             pass # this should fail if the store does not already exist, and we can create it next
 
         chunk_paths = []
-        for day in range(0,365):
+        chunk_paths_orig = []
+        last_day = 365 if self.first_days_only is None else self.first_days_only
+        for day in range(0,last_day):
             in_path = os.path.join(self.climatology_folder,
                                    "D%03d-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc" % (
                                                1 + day))
+            in_path_orig = os.path.join(self.climatology_folder_orig,
+                                   "D%03d-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc" % (
+                                           1 + day))
             chunk_paths.append(in_path)
+            chunk_paths_orig.append(in_path_orig)
 
         chunk_size_time = self.chunk_size[0]
         chunk_size_lat = self.chunk_size[1]
         chunk_size_lon = self.chunk_size[2]
 
-        # first create the store
-        ds = xr.open_dataset(chunk_paths[0]).chunk(
-            {"time": chunk_size_time, "lat": chunk_size_lat, "lon": chunk_size_lon})
-        for name in list(ds.variables):
-            if name != "lat_bnds" and name != "lon_bnds":
-                del ds[name]
-        ds.to_zarr(store=store, mode="w")
-        ds.close()
+        doy = 0
+        creating = True
+        while doy < 365:
 
-        # then re-open and append
-        ds = xr.open_dataset(chunk_paths)
-        ds.to_zarr(store=store, mode="a",
-                       encoding={field_name: {"compressor": compressor} for field_name in climatology_field_names})
+            ds = xr.open_mfdataset(chunk_paths[doy:doy+chunk_size_time]).chunk(
+                {"time": chunk_size_time, "lat": chunk_size_lat, "lon": chunk_size_lon})
 
-        ds.close()
+            del ds["mask"]
+            del ds["lat_bnds"]
+            del ds["lon_bnds"]
+            del ds["time_bnds"]
+
+            ds_orig = xr.open_mfdataset(chunk_paths_orig[doy:doy + chunk_size_time]).chunk(
+                {"time": chunk_size_time, "lat": chunk_size_lat, "lon": chunk_size_lon})
+
+            for field_name in climatology_orig_field_names:
+                safe_assign(ds, ds_orig[field_name], field_name)
+
+            if creating:
+                logger.info("creating zarr store")
+                ds.to_zarr(store=store, mode="w",
+                    encoding = {field_name: {"compressor": compressor}
+                                for field_name in climatology_field_names + climatology_orig_field_names})
+                creating = False
+            else:
+                logger.info("appending zarr store from day %d" % doy)
+                ds.to_zarr(store=store, mode="a",append_dim="time")
+            ds.close()
+            doy += chunk_size_time
 
 
-
-    def publish(self,path,start_year,start_doy,end_year,first_days_only=None):
+    def publish(self,path,start_year,start_doy,end_year):
 
         creating = True
         store = self.open_store(path)
@@ -153,8 +204,8 @@ class Publisher(object):
 
         for year in range(start_year,end_year+1):
 
-            if first_days_only is not None:
-                days = first_days_only
+            if self.first_days_only is not None:
+                days = self.first_days_only
             else:
                 days = self.getDaysInYear(year)
 
@@ -271,20 +322,26 @@ if __name__ == '__main__':
     parser.add_argument('--input-cci', action='store',
                         dest='input_cci',
                         type=str,
-                        help='Specify the location of input CCI files',
+                        help='Specify the location of dust-corrected input CCI files',
                         default=DEFAULT_SST_CCI_ANALYSIS_L4_PATH)
 
     parser.add_argument('--input-c3s', action='store',
                         dest='input_c3s',
                         type=str,
-                        help='Specify the location of input C3S files',
+                        help='Specify the location of dust-corrected input C3S files',
                         default=DEFAULT_C3S_SST_ANALYSIS_L4_PATH)
 
     parser.add_argument('--input-climatology', action='store',
                         dest='climatology_folder',
                         type=str,
-                        help='Specify the location of input climatology files',
+                        help='Specify the location of dust-corrected input climatology files',
                         default=DEFAULT_SST_CCI_CLIMATOLOGY_PATH)
+
+    parser.add_argument('--input-climatology-orig', action='store',
+                        dest='climatology_folder_orig',
+                        type=str,
+                        help='Specify the location of non dust-corrected input climatology files',
+                        default=DEFAULT_ORIG_SST_CCI_CLIMATOLOGY_PATH)
 
     parser.add_argument('--climatology', action='store_true',
                         dest='climatology',
@@ -334,7 +391,7 @@ if __name__ == '__main__':
         logger.setLevel(DEBUG)
 
     chunk_size = tuple(map(lambda n:int(n),args.chunk_size.split(",")))
-    publisher = Publisher(args.input_cci, args.input_c3s, args.climatology_folder, chunk_size)
+    publisher = Publisher(args.input_cci, args.input_c3s, args.climatology_folder, args.climatology_folder_orig, chunk_size, args.first_days_only)
 
     if args.climatology:
         publisher.publish_climatology(args.output_path)
