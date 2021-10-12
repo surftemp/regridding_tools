@@ -13,7 +13,7 @@ Tags:
   - geospatial
 License: Creative Commons Licence by attribution (https://creativecommons.org/licenses/by/4.0/).  For attribution cite www.nature.com/articles/s41597-019-0236-x.
 Resources:
-  - Description: Global daily-mean sea surface temperatures
+  - Description: Global daily-mean sea surface temperatures from 1981 onwards, in Zarr format. The data/sst.zarr directory contains a zarr store chunked (50, 180, 360) along the dimensions (time, lat, lon).
     ARN: arn:aws:s3:::surftemp-sst
     Region: us-west-2
     Type: S3 Bucket
