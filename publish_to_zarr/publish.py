@@ -22,7 +22,6 @@ Publish a netcdf4 SST dataset to zarr format, transporting all required fields a
 
 import os.path
 import datetime
-import sys
 from logging import Logger, INFO, DEBUG, StreamHandler, Formatter
 import zarr
 import s3fs
@@ -45,7 +44,7 @@ DEFAULT_C3S_SST_ANALYSIS_L4_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/ICDR
 DEFAULT_SST_CCI_CLIMATOLOGY_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/CDR_v2/Climatology/L4/v2.1/"
 DEFAULT_ORIG_SST_CCI_CLIMATOLOGY_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/CDR_v2/ClimatologyOrig/L4/v2.1/"
 
-DEFAULT_OUTPUT_PATH="s3://surftemp-sst/sst.zarr"
+DEFAULT_OUTPUT_PATH="s3://surftemp-sst/data/sst.zarr"
 
 cci_sst_field_names = ['analysed_sst', 'analysed_sst_uncertainty', 'sea_ice_fraction', 'mask']
 c3s_sst_field_names = ['analysed_sst', 'analysis_uncertainty', 'sea_ice_fraction', 'mask']
@@ -54,7 +53,6 @@ c3s_rename = { 'analysis_uncertainty':'analysed_sst_uncertainty'} # rename C3S v
 
 climatology_field_names = ['analysed_sst']
 climatology_orig_field_names = ['sea_ice_fraction']
-
 
 logger = Logger("publisher")
 logger.setLevel(INFO)
@@ -101,13 +99,11 @@ class Publisher(object):
     def parseTime(s):
         return datetime.datetime.strptime(s, "%Y%m%dT%H%M%SZ")
 
-    def __init__(self,input_cci_folder,input_c3s_folder,climatology_folder,climatology_folder_orig,chunk_size,first_days_only):
+    def __init__(self,input_cci_folder,input_c3s_folder,chunk_size,first_days_only):
         self.input_cci_folder = input_cci_folder
         self.input_c3s_folder = input_c3s_folder
-        self.climatology_folder = climatology_folder
-        self.climatology_folder_orig = climatology_folder_orig
         self.chunk_size = chunk_size
-        self.first_days_only = None
+        self.first_days_only = first_days_only
 
     def open_store(self,path):
         if path.startswith("s3:"):
@@ -116,65 +112,6 @@ class Publisher(object):
         else:
             store = path
         return store
-
-    def publish_climatology(self,path):
-
-        store = self.open_store(path)
-
-        try:
-            zarr.open(store=store,mode="r")
-            logger.error("zarr climatology store already exists.  Please remove and reload climatology")
-            sys.exit(-1)
-        except:
-            pass # this should fail if the store does not already exist, and we can create it next
-
-        chunk_paths = []
-        chunk_paths_orig = []
-        last_day = 365 if self.first_days_only is None else self.first_days_only
-        for day in range(0,last_day):
-            in_path = os.path.join(self.climatology_folder,
-                                   "D%03d-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc" % (
-                                               1 + day))
-            in_path_orig = os.path.join(self.climatology_folder_orig,
-                                   "D%03d-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc" % (
-                                           1 + day))
-            chunk_paths.append(in_path)
-            chunk_paths_orig.append(in_path_orig)
-
-        chunk_size_time = self.chunk_size[0]
-        chunk_size_lat = self.chunk_size[1]
-        chunk_size_lon = self.chunk_size[2]
-
-        doy = 0
-        creating = True
-        while doy < 365:
-
-            ds = xr.open_mfdataset(chunk_paths[doy:doy+chunk_size_time]).chunk(
-                {"time": chunk_size_time, "lat": chunk_size_lat, "lon": chunk_size_lon})
-
-            del ds["mask"]
-            del ds["lat_bnds"]
-            del ds["lon_bnds"]
-            del ds["time_bnds"]
-
-            ds_orig = xr.open_mfdataset(chunk_paths_orig[doy:doy + chunk_size_time]).chunk(
-                {"time": chunk_size_time, "lat": chunk_size_lat, "lon": chunk_size_lon})
-
-            for field_name in climatology_orig_field_names:
-                safe_assign(ds, ds_orig[field_name], field_name)
-
-            if creating:
-                logger.info("creating zarr store")
-                ds.to_zarr(store=store, mode="w",
-                    encoding = {field_name: {"compressor": compressor}
-                                for field_name in climatology_field_names + climatology_orig_field_names})
-                creating = False
-            else:
-                logger.info("appending zarr store from day %d" % doy)
-                ds.to_zarr(store=store, mode="a",append_dim="time")
-            ds.close()
-            doy += chunk_size_time
-
 
     def publish(self,path,start_year,start_doy,end_year):
 
@@ -315,6 +252,7 @@ class Publisher(object):
         d2 = datetime.date(year, 12, 31)
         return 1 + (d2 - d1).days
 
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
@@ -330,22 +268,6 @@ if __name__ == '__main__':
                         type=str,
                         help='Specify the location of dust-corrected input C3S files',
                         default=DEFAULT_C3S_SST_ANALYSIS_L4_PATH)
-
-    parser.add_argument('--input-climatology', action='store',
-                        dest='climatology_folder',
-                        type=str,
-                        help='Specify the location of dust-corrected input climatology files',
-                        default=DEFAULT_SST_CCI_CLIMATOLOGY_PATH)
-
-    parser.add_argument('--input-climatology-orig', action='store',
-                        dest='climatology_folder_orig',
-                        type=str,
-                        help='Specify the location of non dust-corrected input climatology files',
-                        default=DEFAULT_ORIG_SST_CCI_CLIMATOLOGY_PATH)
-
-    parser.add_argument('--climatology', action='store_true',
-                        dest='climatology',
-                        help='Run the climatology')
 
     parser.add_argument('--start-year', action='store',
                         dest='start_year',
@@ -391,15 +313,12 @@ if __name__ == '__main__':
         logger.setLevel(DEBUG)
 
     chunk_size = tuple(map(lambda n:int(n),args.chunk_size.split(",")))
-    publisher = Publisher(args.input_cci, args.input_c3s, args.climatology_folder, args.climatology_folder_orig, chunk_size, args.first_days_only)
+    publisher = Publisher(args.input_cci, args.input_c3s, chunk_size, args.first_days_only)
 
-    if args.climatology:
-        publisher.publish_climatology(args.output_path)
-    else:
-        if not args.start_year or not args.end_year:
-            logger.warning("Please specify EITHER (--start-year <YEAR> AND --end-year <YEAR>) OR --climatology.")
-            sys.exit(-1)
+    if not args.start_year or not args.end_year:
+        logger.warning("Please specify EITHER (--start-year <YEAR> AND --end-year <YEAR>) OR --climatology.")
+        sys.exit(-1)
 
-        publisher.publish(args.output_path,args.start_year,args.start_doy,args.end_year)
+    publisher.publish(args.output_path,args.start_year,args.start_doy,args.end_year)
 
 

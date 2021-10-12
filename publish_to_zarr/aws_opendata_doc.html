@@ -84,12 +84,15 @@
     <pre>
         import xarray as xr
         import matplotlib.pyplot as plt
-        ds = xr.open_zarr("s3://surftemp.sst/zarr/data.zarr")
+        import s3fs
+        s3 = s3fs.S3FileSystem(anon=True)
+        store = s3fs.S3Map(root="s3://surftemp-sst/sst.zarr", s3=s3, create=False)
+        sst_ds = xr.open_zarr(store)
         # select an area covering the great barrier reef at a particular date
-        da = zarr_ds["analysed_sst"].sel(time=datetime.datetime(2016,2,7),
-               lat=range(-15.6,-10.69867),lon=range(141.4,153.6))
-        da.plot()
-        plt.show()
+        da = sst_ds["analysed_sst"].sel(time="2016-02-18",
+                lat=slice(-15.6,-10.69867),lon=slice(141.4,153.6))
+        da.plot(cmap="coolwarm")
+        plt.show() # need this if not running in a jupyter notebook
     </pre>
 
     <h2>References</h2>
