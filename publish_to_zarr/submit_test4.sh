@@ -2,15 +2,15 @@
 
 #SBATCH --partition=long-serial 
 #SBATCH --job-name=zarr_test
-#SBATCH -o test.out 
-#SBATCH -e test.err 
+#SBATCH -o test4.out 
+#SBATCH -e test4.err 
 #SBATCH -t 96:00:00
 #SBATCH --mem=10000
 
 conda activate aws_env
 
-START_YEAR=1981
-END_YEAR=1989
+START_YEAR=2010
+END_YEAR=2020
 
 for ((year=$START_YEAR;year<=$END_YEAR;year++)); do
     if [ "$year" = "1981" ]; then
