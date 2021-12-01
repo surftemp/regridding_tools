@@ -23,7 +23,8 @@ print("Converting %s -> %s"%(input_path,output_path))
 f = cf.read(input_path)
 regridded = []
 for field in range(4):
-    rg = f[field].regrids(g,method="bilinear",src_cyclic=True,dst_cyclic=True)
+    print("\tConverting field: "+ f[field].long_name)
+    rg = f[field].regrids(g,method="linear",src_cyclic=True,dst_cyclic=True)
     print(".")
     regridded.append(rg)
 

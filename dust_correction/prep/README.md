@@ -1,6 +1,6 @@
 # dust contamination - task to prepare data
 
-This task is to obtain netcdf4 files containing 4 dust aerosol optical depth (AOD) variables from ECMWF and create a climatology.
+This task is to obtain netcdf4 files containing 4 dust aerosol optical depth (AOD) variables from the Atmospheric Data Store (ADS) and create a climatology.
 
 The data will then be used to study how dust contamination affects sea surface temperature estimates.
 
@@ -11,51 +11,41 @@ The required variables are:
 * aermssdum  Vertically integrated mass of dust aerosol (0.55 - 9 um)
 * aermssdus  Vertically integrated mass of dust aerosol (0.03 - 0.55 um)
 
-(1) download data from ECMWF using download.py
+(1) download data from the ADS using download.py
 
-See the following URL for helping to create the MARS request.
-
-https://apps.ecmwf.int/data-catalogues/cams-reanalysis/?axis_param=209.210&class=mc&expver=eac4&stream=oper&type=an&year=2003&month=jan&levtype=sfc
-
-A python environment with the ECMWF API installed is required.  https://www.ecmwf.int/en/forecasts/access-forecasts/ecmwf-web-api has more details on obtaining and installing a key enabling use of the API.
-
-I used conda to create a python 3.5 environment for this using:
-
-```
-conda create -n dust2 python=3.5
-conda activate dust2
-pip install ecmwf-api-client
-```
+To register for access and set up a python environment and key, see https://ads.atmosphere.copernicus.eu/api-how-to
 
 Then run:
 
 ```
-python download.py
+python download.py --start-year YYYY --end-year YYYY
 ```
 
-This should download files from ECMWF containing the 4 dust measurements, regridded to 0.5 deg, at 12.00 every day:
+This should download files from the ADS containing the 4 dust measurements, regridded to 0.5 deg, at 12.00 every day.  One file is generated for each year.
 
 ```
-output2003_0p5.nc
+dust_2003.nc
 ...
-output2018_0p5.nc
+dust_2020.nc
 ```
 
-Note: the ECMWF API is no longer availale and the download will have to be gotten from the ADS.  Issue https://github.com/surftemp/general-tasks/issues/17 is created to track this.
+(2) Download forecast data for the current year using download_forecast.py
 
-(2) regrid the files using cfpython (spherical regridding / blinear)
+```
+python download_forecast.py --start-date YYYY-MM-DD --end-year YYYY-MM-DD
+```
 
-The ECMWF downloaded files have different boundaries (lat from -90.0 to +90, lon from 0 to 359.5).  
-We need instead the boundaries (lat from -89.75 to 89.75, lon from -179.75 to 179.75).
+This will download the data to file `dust_forecast.nc`
+
+(3) regrid/interpolate the files using cf-python to 0.5 degree 
 
 You will need cfpython installed to run the `regrid.py` script.  I used the following to create a conda environment:
 
 ```
 conda create -n cfpy python=3.8
 conda activate cfpy
-conda install -c conda-forge cartopy
 conda install udunits2=2.2.25
-pip install cf-python cf-plot
+pip install cf-python
 conda install -c conda-forge esmpy
 ```
 
@@ -63,13 +53,13 @@ You will also need a reference netCDF4 file with the desired lat/lon grid.  I us
 
 Then run:
 ```
-python regrid.py output_2003_0p5 regridded2003_0p5.nc <reference file>
-python regrid.py output_2003_0p5 regridded2003_0p5.nc <reference file>
+python regrid.py dust_2003.nc regridded2003_0p5.nc <reference file>
+python regrid.py dust_2004.nc regridded2003_0p5.nc <reference file>
 ...
 python regrid.py output_2018_0p5 regridded2018_0p5.nc <reference file>
 ```
 
-(3) split regridded data into daily files
+(4) split regridded data into daily files
 
 This converts the regridded*.nc files into daily files named daily/YEAR/day1.nc, daily/YEAR/day2.nc, etc
 
@@ -81,7 +71,7 @@ Then run:
 python split.py
 ```
 
-(4) create climatology
+(5) create climatology
 
 The script `create_dust_climatology.py` works through groups of daily files to compute a climatology from the years 2003 to 2017 inclusive and a 5 day window.
 

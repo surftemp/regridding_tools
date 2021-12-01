@@ -2,9 +2,17 @@
 
 import cdsapi
 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--start-year", type=int, default=2020)
+parser.add_argument("--end-year", type=int, default=2021)
+
+args = parser.parse_args()
+
 c = cdsapi.Client(progress=False)
 
-for year in range(2020,2021):
+for year in range(args.start_year, args.end_year):
     try:
         c.retrieve(
             'cams-global-reanalysis-eac4',
