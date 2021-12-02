@@ -13,6 +13,7 @@
 import cf
 import sys
 
+
 input_path = sys.argv[1]
 output_path = sys.argv[2]
 reference_file = sys.argv[3]
@@ -22,9 +23,12 @@ g = cf.read(reference_file)[0]
 print("Converting %s -> %s"%(input_path,output_path))
 f = cf.read(input_path)
 regridded = []
-for field in range(4):
-    print("\tConverting field: "+ f[field].long_name)
-    rg = f[field].regrids(g,method="linear",src_cyclic=True,dst_cyclic=True)
+for index in range(4):
+    field = f[index]
+    if index == 3:
+        field.units = ""  # avoid udunits complaining
+    print("\tConverting field: "+ field.long_name)
+    rg = field.regrids(g,method="linear",src_cyclic=True,dst_cyclic=True)
     print(".")
     regridded.append(rg)
 

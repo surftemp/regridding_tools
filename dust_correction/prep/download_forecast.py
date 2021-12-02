@@ -8,7 +8,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--start-date", type=str, default="2021-01-01", help="start date for download in YYYY-MM-DD format")
-parser.add_argument("--end-date", type=str, default="2021-07-01",  help="end date for download in YYYY-MM-DD format")
+parser.add_argument("--end-date", type=str, default="2021-10-31",  help="end date for download in YYYY-MM-DD format")
 
 args = parser.parse_args()
 
