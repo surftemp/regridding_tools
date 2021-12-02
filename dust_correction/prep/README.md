@@ -68,7 +68,9 @@ You will need cfpython installed to run the `split.py` script (see step 2 for in
 Then run:
 
 ```
-python split.py
+python split.py dust_2003.nc /tmp/2003
+python split.py dust_2004.nc /tmp/2004
+...
 ```
 
 (5) create climatology
