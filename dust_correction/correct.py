@@ -142,7 +142,10 @@ if __name__ == '__main__':
 
                 if int(year) >= 2017:
                     # avoid strange issue with CF incompatible calendar (https://github.com/surftemp/sst-services/issues/10)
-                    ds.to_netcdf(out_path,encoding={"time":{"calendar":"gregorian"}})
+                    encoding = {"time":{"calendar":"gregorian","units":"seconds since 1981-01-01 00:00:00"}}
+                    if "time_bnds" in ds:
+                        encoding["time_bnds"] = {"calendar":"gregorian","units":"seconds since 1981-01-01 00:00:00"}
+                    ds.to_netcdf(out_path,encoding=encoding)
                 else:
                     ds.to_netcdf(out_path)
 
