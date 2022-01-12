@@ -78,11 +78,13 @@ if __name__ == '__main__':
     parser.add_argument('--input-month', type=int, help="input month to process (defaults to all months)", default=-1)
     parser.add_argument('--input-day', type=int, help="input day to process (defaults to all days)", default=-1)
     parser.add_argument('--output-dir', type=str, help="output folder to store adjusted SST files", default="/tmp")
+    parser.add_argument('--cdr-version', type=str, help="set the CDR version (2.0, 2.1 etc)", default="2.1")
 
     args = parser.parse_args()
 
     # create an adjuster to perform the dust correction
     adjuster = DustAdjuster(args.data_dir,1.0)
+    cdr_version = args.cdr_version
 
     # we expect the input directory to hold data files according to the standard directory structure YYYY/MM/DD
 
@@ -109,13 +111,16 @@ if __name__ == '__main__':
                 # build the name of the input file we expect, either C3S or CCI
                 dt = datetime.datetime(year=int(year),month=int(month),day=int(day))
                 if int(year) < 2017:
-                    filename = "%s-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000"))
+                    filename = "%s-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR%s-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000"),cdr_version)
                     sst_fieldname = 'analysed_sst'
                     sst_uncertainty_fieldname = 'analysed_sst_uncertainty'
                 else:
-                    filename = "%s-C3S-L4_GHRSST-SSTdepth-OSTIA-GLOB_ICDR2.0-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000"))
+                    filename = "%s-C3S-L4_GHRSST-SSTdepth-OSTIA-GLOB_ICDR%s-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000"),cdr_version)
                     sst_fieldname = 'analysed_sst'
-                    sst_uncertainty_fieldname = 'analysis_uncertainty'
+                    if cdr_version == "2.0":
+                        sst_uncertainty_fieldname = 'analysis_uncertainty'
+                    else:
+                        sst_uncertainty_fieldname = 'analysed_sst_uncertainty'
                 in_path = os.path.join(day_dir,filename)
 
                 # open the dataset
