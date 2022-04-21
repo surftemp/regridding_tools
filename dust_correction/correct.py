@@ -140,13 +140,15 @@ if __name__ == '__main__':
                 out_path = os.path.join(out_folder,filename)
                 logger.info("Writing %s" % (out_path))
 
+                ds.attrs["corrections"] = "Post-hoc corrections have been applied from Merchant and Embury (2020) https://doi.org/10.3390/rs12162554"
+                encoding={v: {'_FillValue': None} for v in ["lat", "lon", "lat_bnds", "lon_bnds"]}
+
                 if int(year) >= 2017:
                     # avoid strange issue with CF incompatible calendar (https://github.com/surftemp/sst-services/issues/10)
-                    encoding = {"time":{"calendar":"gregorian","units":"seconds since 1981-01-01 00:00:00"}}
+                    encoding["time"] = {"calendar":"gregorian","units":"seconds since 1981-01-01 00:00:00"}
                     if "time_bnds" in ds:
                         encoding["time_bnds"] = {"calendar":"gregorian","units":"seconds since 1981-01-01 00:00:00"}
-                    ds.to_netcdf(out_path,encoding=encoding)
-                else:
-                    ds.to_netcdf(out_path)
+                ds.to_netcdf(out_path,encoding=encoding)
+
 
 

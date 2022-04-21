@@ -22,7 +22,6 @@ Publish a netcdf4 SST dataset to zarr format, transporting all required fields a
 
 import os.path
 from logging import Logger, INFO, DEBUG, StreamHandler, Formatter
-import zarr
 import s3fs
 import sys
 import numpy
@@ -39,7 +38,7 @@ compressor=Zstd(level=3)
 # aws_secret_access_key=<access-secret>
 
 import xarray as xr
-import numpy as np
+import time
 
 DEFAULT_SST_CCI_ANALYSIS_L4_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/CDR_v2/Analysis/L4/v2.1"
 DEFAULT_C3S_SST_ANALYSIS_L4_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc/ICDR_v2/Analysis/L4/v2.0/"
@@ -49,19 +48,21 @@ DEFAULT_ORIG_SST_CCI_CLIMATOLOGY_PATH = "/gws/nopw/j04/esacci_sst/users/niallmcc
 DEFAULT_ZARR_PATH = "s3://surftemp-sst/data/sst.zarr"
 # DEFAULT_ZARR_PATH="/gws/nopw/j04/esacci_sst/users/niallmcc/sst.zarr" # "/group_workspaces/jasmin2/nceo_uor/niall/reslice"
 
-cci_sst_field_names = ['analysed_sst', 'analysed_sst_uncertainty', 'sea_ice_fraction', 'mask']
-c3s_sst_field_names = ['analysed_sst', 'analysis_uncertainty', 'sea_ice_fraction', 'mask']
-climatology_field_names = ['analysed_sst']
-climatology_orig_field_names = ['sea_ice_fraction']
+zarr_field_names = ['analysed_sst', 'analysed_sst_uncertainty', 'sea_ice_fraction', 'mask']
 
-c3s_rename = { 'analysis_uncertainty':'analysed_sst_uncertainty' }
+# map from zarr feld names to netcdf4 field names
+c3s_renames = { 'analysed_sst_uncertainty':'analysis_uncertainty' }
+cci_renames = {}
 
-logger = Logger("publisher")
+logger = Logger("tester")
 logger.setLevel(INFO)
 sh = StreamHandler(sys.stdout)
 formatter = Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 sh.setFormatter(formatter)
 logger.addHandler(sh)
+
+retry_limit = 10
+retry_delay = 30
 
 class Tester(object):
 
@@ -81,19 +82,19 @@ class Tester(object):
             store = path
         return store
 
-    def test(self,path,start_dt,end_dt):
+    def test(self,path,start_dt,end_dt, field_name):
 
         store = self.open_store(path)
 
         zarr_ds = xr.open_zarr(store)
 
+        field_names = [field_name] if field_name is not None else zarr_field_names
+
+        logger.info("Checking data in fields %s from %s to %s"%(", ".join(field_names),str(start_dt),str(end_dt)))
+
         dt = start_dt
         while dt <= end_dt:
             year = dt.year
-            if year < 2017:
-                field_names = cci_sst_field_names
-            else:
-                field_names = c3s_sst_field_names
 
             test_label = str(dt)
             if year < 2017:
@@ -106,13 +107,28 @@ class Tester(object):
             original_ds = xr.open_dataset(in_path)
 
             for field_name in field_names:
-                if year >= 2017 and field_name in c3s_rename:
-                    zarr_field_name = c3s_rename[field_name]
-                else:
-                    zarr_field_name = field_name
-                original_arr = original_ds[field_name].data.reshape((3600,7200))
-                zarr_arr = zarr_ds[zarr_field_name].sel(time=dt).data
-                numpy.testing.assert_almost_equal(original_arr,zarr_arr)
+                retry_count = 0
+                while True:
+                    try:
+                        if year >= 2017:
+                            netcdf4_field_name = c3s_renames.get(field_name,field_name)
+                        else:
+                            netcdf4_field_name = cci_renames.get(field_name,field_name)
+                        original_arr = original_ds[netcdf4_field_name].data.reshape((3600,7200))
+                        zarr_arr = zarr_ds[field_name].sel(time=dt).data
+                        numpy.testing.assert_almost_equal(original_arr,zarr_arr)
+                        break
+                    except Exception as ex:
+                        msg = "exception checking field=%s dt=%s: %s"%(field_name,str(dt),str(ex))
+                        if retry_count < retry_limit:
+                            logger.warning(msg)
+                            logger.warning("retrying after %d seconds"%(retry_delay))
+                            retry_count += 1
+                            time.sleep(retry_delay)
+                        else:
+                            logger.error(msg)
+                            break
+
 
             dt = dt + datetime.timedelta(days=1)
 
@@ -167,6 +183,9 @@ if __name__ == '__main__':
                         dest='verbose',
                         help='log debug output')
 
+    parser.add_argument('--field-name',
+                        help='test a particular field name only')
+
     args = parser.parse_args()
     if args.verbose:
         logger.setLevel(DEBUG)
@@ -179,6 +198,6 @@ if __name__ == '__main__':
 
     start_dt = datetime.datetime.strptime(args.start_date, "%Y-%m-%d") + datetime.timedelta(hours=12)
     end_dt = datetime.datetime.strptime(args.end_date, "%Y-%m-%d") + datetime.timedelta(hours=12)
-    tester.test(args.zarr_path,start_dt,end_dt)
+    tester.test(args.zarr_path,start_dt,end_dt,args.field_name)
 
 
