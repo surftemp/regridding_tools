@@ -141,8 +141,12 @@ if __name__ == '__main__':
                 logger.info("Writing %s" % (out_path))
 
                 ds.attrs["corrections"] = "Post-hoc corrections have been applied from Merchant and Embury (2020) https://doi.org/10.3390/rs12162554"
-                encoding={v: {'_FillValue': None} for v in ["lat", "lon", "lat_bnds", "lon_bnds"]}
 
+                encoding={v: {'_FillValue': None} for v in ["lat", "lon"]}
+                if "lat_bnds" in ds:
+                    encoding["lat_bnds"] = {'_FillValue':None}
+                if "lon_bnds" in ds:
+                    encoding["lon_bnds"] = {'_FillValue':None}
                 if int(year) >= 2017:
                     # avoid strange issue with CF incompatible calendar (https://github.com/surftemp/sst-services/issues/10)
                     encoding["time"] = {"calendar":"gregorian","units":"seconds since 1981-01-01 00:00:00"}
