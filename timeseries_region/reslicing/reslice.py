@@ -134,9 +134,13 @@ class Reslicer(object):
                 days_processed += 1
                 in_fields.close()
 
-            chunk = np.concatenate(chunk_data, axis=0)
-            za[day:day+chunk.shape[0], :, :, :] = chunk
-            day += chunk_size_days
+            if chunk_data:
+                chunk = np.concatenate(chunk_data, axis=0)
+                za[day:day+chunk.shape[0], :, :, :] = chunk
+                day += chunk_size_days
+
+            if premature_end_of_data:
+                break
 
         partial_or_complete = "partial" if premature_end_of_data else "complete"
         logger.info("Completed %s reslicing for year %s to %s (processed %d days)"%(partial_or_complete,str(year),path,days_processed))
