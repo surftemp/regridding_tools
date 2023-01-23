@@ -56,11 +56,12 @@ class Reslicer(object):
     def parseTime(s):
         return datetime.datetime.strptime(s, "%Y%m%dT%H%M%SZ")
 
-    def __init__(self,input_cci_folder,input_c3s_folder,climatology_folder,output_resolution):
+    def __init__(self,input_cci_folder,input_c3s_folder,climatology_folder,output_resolution,cdr_version):
         self.input_cci_folder = input_cci_folder
         self.input_c3s_folder = input_c3s_folder
         self.climatology_folder = climatology_folder
         self.output_resolution = output_resolution
+        self.cdr_version = cdr_version
 
     def reslice(self,output_parent_folder,year):
 
@@ -105,10 +106,10 @@ class Reslicer(object):
                     in_path = os.path.join(self.climatology_folder,"D%03d-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc"%(1+day+chunk_day))
                 elif year < 2017:
                     in_path = os.path.join(self.input_cci_folder,str(year),"%02d"%(dt.month),"%02d"%(dt.day),
-                        "%s-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000")))
+                        "%s-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR%s-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000"),self.cdr_version))
                 else:
                     in_path = os.path.join(self.input_c3s_folder,str(year),"%02d"%(dt.month),"%02d"%(dt.day),
-                                               "%s-C3S-L4_GHRSST-SSTdepth-OSTIA-GLOB_ICDR2.0-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000")))
+                                               "%s-C3S-L4_GHRSST-SSTdepth-OSTIA-GLOB_ICDR%s-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000"),self.cdr_version))
 
                 if not os.path.exists(in_path):
                     msg = "could not locate input file %s"%(in_path)
@@ -172,6 +173,8 @@ if __name__ == '__main__':
                         help='Specify the location of input C3S files',
                         default=DEFAULT_C3S_SST_ANALYSIS_L4_PATH)
 
+    parser.add_argument('--cdr-version', type=str, help="set the CDR version (2.0, 2.1 etc)", default="2.1")
+
     parser.add_argument('--input-climatology', action='store',
                         dest='climatology_folder',
                         type=str,
@@ -205,7 +208,7 @@ if __name__ == '__main__':
     if args.verbose:
         logger.setLevel(DEBUG)
 
-    reslicer = Reslicer(args.input_cci, args.input_c3s, args.climatology_folder, args.output_resolution)
+    reslicer = Reslicer(args.input_cci, args.input_c3s, args.climatology_folder, args.output_resolution, args.cdr_version)
 
     if not args.year:
         logger.warning("Please specify --year <YEAR> or --year climatology.")
