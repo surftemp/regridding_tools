@@ -12,11 +12,23 @@ import os
 
 import regridding_constants
 
-
 class InputType(Enum):
     SST_L4 = auto()
     SST_L3U = auto()
 
+def locate_file(in_dir):
+    """Locate a netcdf file in the specified directory and return its filename
+
+    :param in_dir:
+        The path to the directory to search
+
+    Raises an exception if less or more than one netcdf file exists in the directory
+    """
+    files = os.listdir(in_dir)
+    ncfiles = list(filter(lambda f: f.endswith(".nc"),files))
+    if len(ncfiles) != 1:
+        raise Exception(f"Directory {in_dir} does not contain exactly one netcdf4 file")
+    return os.path.join(in_dir, ncfiles[0])
 
 def allowed_lonlat_resolutions(base_resolution, max_resolution, lonlat_range, min_resolution=None):
     """
@@ -279,24 +291,19 @@ class Regridder(object):
         if climatology:
             if d.month == 2 and d.day == 29:
                 # If the day is the 29th of February the files for D59 and D60 will be averaged.
-                filename = (os.path.join(self.sst_cci_climatology_path,
+                filename = (os.path.join(self.sst_climatology_path,
                                          'D059-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc'),
-                            os.path.join(self.sst_cci_climatology_path,
+                            os.path.join(self.sst_climatology_path,
                                          'D060-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc'))
             else:
                 # Get day of year as if the year was a non-leap year.
                 day_of_year = date(1982, d.month, d.day).timetuple().tm_yday
-                filename = (os.path.join(self.sst_cci_climatology_path, 'D' + str(day_of_year).zfill(3) +
+                filename = (os.path.join(self.sst_climatology_path, 'D' + str(day_of_year).zfill(3) +
                                          '-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc'))
         elif self.input_type is InputType.SST_L4:
-            if d.year >= regridding_constants.c3s_start_year:
-                filename = os.path.join(self.c3s_sst_analysis_l4_path,
-                                        d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'), d.strftime('%Y%m%d') +
-                                        '120000-C3S-L4_GHRSST-SSTdepth-OSTIA-GLOB_ICDR2.0-v02.0-fv01.0.nc')
-            else:
-                filename = os.path.join(self.sst_cci_analysis_l4_path,
-                                        d.strftime('%Y'), d.strftime('%m'), d.strftime('%d'), d.strftime('%Y%m%d') +
-                                        '120000-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc')
+            filename = locate_file(os.path.join(
+                    self.sst_analysis_l4_path, d.strftime('%Y'), d.strftime('%m'), d.strftime('%d')))
+
         elif self.input_type is InputType.SST_L3U:
             filename = sorted(glob.glob(os.path.join(self.sst_l3u_path, self.sensor, d.strftime('%Y'), d.strftime('%m'),
                                                      d.strftime('%d'), '*.nc')))
@@ -416,10 +423,10 @@ class Regridder(object):
             The new field.
         """
         # Get the first and the last field
-        fl = cf.read(filenames[0], aggregate=False)
+        fl = cf.read(filenames[0], aggregate=False, extra='field_ancillary')
         first_field = fl.select_by_property(standard_name=standard_name)[0]
 
-        gl = cf.read(filenames[-1], aggregate=False)
+        gl = cf.read(filenames[-1], aggregate=False, extra='field_ancillary')
         last_field = gl.select_by_property(standard_name=standard_name)[0]
 
         # Copy the field without the data

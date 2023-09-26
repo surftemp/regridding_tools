@@ -13,7 +13,7 @@ import numpy as np
 import regridding_constants
 import regridding_utilities
 
-_default_year = regridding_constants.cci_start_year + 1
+_default_year = 2000
 _default_start_month = 1
 _default_start_day = 1
 _default_end_month = 12
@@ -34,26 +34,21 @@ class SSTRegridder(regridding_utilities.Regridder):
     Should be instantiated first, optionally with paths to the input data and then a call made to the resulting object
     to perform the regridding at a particular resolution with other options available.
     """
-    def __init__(self, sst_cci_analysis_l4_path=regridding_constants.default_sst_cci_analysis_l4_path,
-                 c3s_sst_analysis_l4_path=regridding_constants.default_c3s_sst_analysis_l4_path,
-                 sst_cci_climatology_path=regridding_constants.default_sst_cci_climatology_path, ):
+    def __init__(self, sst_analysis_l4_path=regridding_constants.default_sst_analysis_l4_path,
+                 sst_climatology_path=regridding_constants.default_sst_climatology_path):
         """
         Initiate an SST regridder optionally specfying the input file paths.
 
         :param sst_cci_climatology_path:
             Path to the SST CCI Climatology input data.
 
-        :param c3s_sst_analysis_l4_path:
-            Path to the C3S SST Analysis Level 4 input data.
-
-        :param sst_cci_analysis_l4_path:
-            Path to the SST CCI Analysis Level 4 input data.
+        :param sst_analysis_l4_path:
+            Path to the SST Analysis Level 4 input data.
         """
         self.input_type = regridding_utilities.InputType.SST_L4
 
-        self.sst_cci_analysis_l4_path = sst_cci_analysis_l4_path
-        self.c3s_sst_analysis_l4_path = c3s_sst_analysis_l4_path
-        self.sst_cci_climatology_path = sst_cci_climatology_path
+        self.sst_analysis_l4_path = sst_analysis_l4_path
+        self.sst_climatology_path = sst_climatology_path
 
         self.base_resolution = 0.05
         self.max_resolution = 5.0
@@ -219,8 +214,6 @@ class SSTRegridder(regridding_utilities.Regridder):
         """
         Check the dates and time resolution are allowed.
         """
-        if self.year < regridding_constants.cci_start_year:
-            raise ValueError('Year out of range.')
         if self.start_month < 1 or self.start_month > 12:
             raise ValueError('Start month out of range.')
         if self.end_month < 1 or self.end_month > 12:
@@ -274,7 +267,8 @@ class SSTRegridder(regridding_utilities.Regridder):
 
             for filename, climatology_filename in zip(filenames, climatology_filenames):
                 # Read in data
-                fl = cf.read(filename, aggregate=False)
+                print("Reading: "+filename)
+                fl = cf.read(filename, aggregate=False,extra='field_ancillary')
 
                 # Select the SST and create longitude and latitude bounds if necessary
                 sst = fl.select_by_property(standard_name='sea_water_temperature')[0]
@@ -285,8 +279,8 @@ class SSTRegridder(regridding_utilities.Regridder):
 
                 # OR the sea ice fraction mask with the SST mask.  In years >= c3s_start_year, a few cells in the SST
                 # field are masked where equivalent cells in other fields are not.
-                if self.year >= regridding_constants.c3s_start_year:
-                    np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sif.array), sif.varray, copy=False)
+                # if self.year >= regridding_constants.c3s_start_year:
+                #    np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sif.array), sif.varray, copy=False)
 
                 regridding_utilities.create_lonlat_bounds(sif)
 
@@ -295,9 +289,9 @@ class SSTRegridder(regridding_utilities.Regridder):
 
                 # OR the SST uncertainty mask with the SST mask.  In years >= c3s_start_year, a few cells in the SST
                 # field are masked where equivalent cells in other fields are not
-                if self.year >= regridding_constants.c3s_start_year:
-                    np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sst_uncert.array),
-                                       sst_uncert.varray, copy=False)
+                # if self.year >= regridding_constants.c3s_start_year:
+                #    np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sst_uncert.array),
+                #                       sst_uncert.varray, copy=False)
 
                 regridding_utilities.create_lonlat_bounds(sst_uncert)
 
@@ -358,9 +352,9 @@ class SSTRegridder(regridding_utilities.Regridder):
 
                     # OR the climatology mask with the SST mask.  In years >= c3s_start_year, a few cells in the SST
                     # field are masked where equivalent cells in other fields are not
-                    if self.year >= regridding_constants.c3s_start_year:
-                        np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sst_climatology.array),
-                                           sst_climatology.varray, copy=False)
+                    # if self.year >= regridding_constants.c3s_start_year:
+                    #    np.ma.masked_where(np.ma.getmask(sst.array) | np.ma.getmask(sst_climatology.array),
+                    #                       sst_climatology.varray, copy=False)
 
                     data = self.spatially_resample_data(sst_climatology.where(sif > self.f_max, cf.masked), weights=True)
                     if resampled_sst_climatology_data is None:
@@ -496,11 +490,9 @@ if __name__ == '__main__':
     parser.add_argument('--spatial_lambda', type=float, default=_default_spatial_lambda,
                         help='Spatial scale within which errors are assumed to be fully correlated in degrees. '
                              + 'Default is ' + str(_default_spatial_lambda) + ' degrees.')
-    parser.add_argument('--sst_cci_analysis_l4_path', default=regridding_constants.default_sst_cci_analysis_l4_path,
-                        help='Path to the SST CCI Analysis Level 4 input data.')
-    parser.add_argument('--c3s_sst_analysis_l4_path', default=regridding_constants.default_c3s_sst_analysis_l4_path,
-                        help='Path to the C3S SST Analysis Level 4 input data.')
-    parser.add_argument('--sst_cci_climatology_path', default=regridding_constants.default_sst_cci_climatology_path,
+    parser.add_argument('--sst_analysis_l4_path', default=regridding_constants.default_sst_analysis_l4_path,
+                        help='Path to the SST Analysis Level 4 input data.')
+    parser.add_argument('--sst_climatology_path', default=regridding_constants.default_sst_climatology_path,
                         help='Path to the SST CCI Climatology input data.')
     parser.add_argument('--out_path', default=_default_out_path,
                         help='The path in which to write the output file of regridded data.')
@@ -514,9 +506,8 @@ if __name__ == '__main__':
     except ValueError:
         time_resolution = args.time_resolution
 
-    sst_regridder = SSTRegridder(sst_cci_analysis_l4_path=args.sst_cci_analysis_l4_path,
-                                 c3s_sst_analysis_l4_path=args.c3s_sst_analysis_l4_path,
-                                 sst_cci_climatology_path=args.sst_cci_climatology_path)
+    sst_regridder = SSTRegridder(sst_analysis_l4_path=args.sst_analysis_l4_path,
+                                 sst_climatology_path=args.sst_climatology_path)
 
     sst_regridder(args.lon_resolution, args.lat_resolution, time_resolution, year=args.year,
                   start_month=args.start_month, start_day=args.start_day, end_month=args.end_month,
