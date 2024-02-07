@@ -267,7 +267,6 @@ class SSTRegridder(regridding_utilities.Regridder):
 
             for filename, climatology_filename in zip(filenames, climatology_filenames):
                 # Read in data
-                print("Reading: "+filename)
                 fl = cf.read(filename, aggregate=False,extra='field_ancillary')
 
                 # Select the SST and create longitude and latitude bounds if necessary
@@ -392,7 +391,7 @@ class SSTRegridder(regridding_utilities.Regridder):
                 resampled_sst.nc_set_variable('sst')
                 resampled_sst.long_name = 'regridded analysed sea surface temperature'
             resampled_sst.comment = 'These data were produced by the University of Reading as part of the ESA ' + \
-                                    'CCI project. Points where the sea ice fraction was above f_max were excluded. ' + \
+                                    'CCI and EOCIS projects. Points where the sea ice fraction was above f_max were excluded. ' + \
                                     'Please refer to the global attributes for its value.'
 
             # Create the resampled sst uncertainty field
@@ -402,7 +401,7 @@ class SSTRegridder(regridding_utilities.Regridder):
             resampled_sst_uncert.long_name = 'estimated error standard deviation of regridded analysed sea surface ' + \
                                              'temperature'
             resampled_sst_uncert.comment = 'These data were produced by the University of Reading as part of the ' + \
-                                           'ESA CCI project. Points where the sea ice fraction was above f_max ' + \
+                                           'ESA CCI and EOCIS projects. Points where the sea ice fraction was above f_max ' + \
                                            'were excluded. The approximate model is that errors are fully ' + \
                                            'correlated for timescales shorter than tau days and spacescales ' + \
                                            'shorter than lambda degrees. Please refer to the global attributes for ' + \

@@ -292,14 +292,14 @@ class Regridder(object):
             if d.month == 2 and d.day == 29:
                 # If the day is the 29th of February the files for D59 and D60 will be averaged.
                 filename = (os.path.join(self.sst_climatology_path,
-                                         'D059-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc'),
+                                         'D059-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR3.0-v02.0-fv01.0.nc'),
                             os.path.join(self.sst_climatology_path,
-                                         'D060-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc'))
+                                         'D060-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR3.0-v02.0-fv01.0.nc'))
             else:
                 # Get day of year as if the year was a non-leap year.
                 day_of_year = date(1982, d.month, d.day).timetuple().tm_yday
                 filename = (os.path.join(self.sst_climatology_path, 'D' + str(day_of_year).zfill(3) +
-                                         '-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc'))
+                                         '-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR3.0-v02.0-fv01.0.nc'))
         elif self.input_type is InputType.SST_L4:
             filename = locate_file(os.path.join(
                     self.sst_analysis_l4_path, d.strftime('%Y'), d.strftime('%m'), d.strftime('%d')))
