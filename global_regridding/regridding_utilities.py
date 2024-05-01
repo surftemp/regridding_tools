@@ -546,21 +546,22 @@ class Regridder(object):
         g.set_property('creator_processing_institution', 'These data were produced by the University of ' +
                        'Reading as part of the ESA CCI project.')
         if self.input_type is InputType.SST_L4:
-            g.set_property('acknowledgment', 'Regridding service funded by National Centre for Earth ' +
+            g.set_property('comment', 'Regridding service funded by National Centre for Earth ' +
                            'Observation, UK')
+            g.set_property("acknowledgement","The European Space Agency (ESA) funded the research and development of software to generate these data (grant reference ESA/AO/1-9322/18/I-NB), in addition to funding the production of the Climate Data Record (CDR) for 1980 to 2021. The Copernicus Climate Change Service (C3S) funded the development of the Interim-CDR (ICDR) extension and production of ICDR during 2022. From 2023 onwards the production of the ICDR is funded by the UK Natural Environment Research Council (NERC grant reference number NE/X019071/1, Earth Observation Climate Information Service) and the UK Marine and Climate Advisory Service (UKMCAS), benefitting from the Earth Observation Investment Package of the Department of Science, Innovation and Technology.")
 
         # Tweak metadata as discussed in https://github.com/surftemp/sst-services/issues/17
         if self.input_type is InputType.SST_L4:
             g.set_property('summary', 'Regridding of L4 analysis product from the ESA SST CCI project')
-        g.set_property('creator_email','c.j.merchant@reading.ac.uk')
+        g.set_property('creator_email','ml-ostia@metoffice.gov.uk')
         g.set_property('publisher_email', 'c.j.merchant@reading.ac.uk')
         if self.input_type is InputType.SST_L4:
-            g.set_property('references','Merchant, C.J., Embury, O., Bulgin, C.E., Block, T., Corlett, G.K., Fiedler, E., Good, S.A., Mittaz, J., Rayner, N.A., Berry, D., Eastwood, S., Taylor, M., Tsushima, Y., Waterfall, A., Wilson, R. and Donlon, C. (2019), Satellite-based time-series of sea-surface temperature since 1981 for climate applications. Scientific Data 6, 223, doi:10.1038/s41597-019-0236-x, and Merchant, C. J. and Embury, O. (2020) Adjusting for desert-dust-related biases in a climate data record of sea surface temperature. Remote Sensing, 12 (16). 2554. ISSN 2072-4292 doi:10.3390/rs12162554')
-        g.set_property('creator_url','http://climate.esa.int/')
-        g.set_property('metadata_link','http://climate.esa.int/')
+            g.set_property('references','Embury, O., Merchant, C.J., Good, S.A., Rayner, N.A., Høyer, J.L., Atkinson, C., Block, T., Alerskans, E., Pearson, K.J., Worsfold, M., McCarroll, N., Donlon, C. Satellite-based time-series of sea-surface temperature since 1980 for climate applications. Scientific Data 11, 326 (2024).  https://doi.org/10.1038/s41597-024-03147-w')
+        g.set_property('creator_url','https://www.metoffice.gov.uk')
+        g.set_property('metadata_link','https://doi.org/10.5285/4a9654136a7148e39b7feb56f8bb02d2')
         if self.input_type is InputType.SST_L4:
-            g.set_property('title','ESA SST CCI L4 analysis')
-            g.set_property('history','Created by makegriddedSSTs.py v1.0 operating on SST CCI L4 analysis products')
+            g.set_property('title','ESA SST CCI Analysis v3.0')
+            g.set_property('history','Created using OSTIA reanalysis system CDR3.0')
         elif self.input_type is InputType.SST_L3U:
             g.set_property('history', 'Created by makegriddedL3USSTs.py v1.0 operating on SST CCI L3U products')
 

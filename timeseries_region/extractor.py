@@ -43,7 +43,6 @@ class Extractor(object):
             the folder where the input (spatially resliced) dataset is stored.
         """
         self.base_folder = base_folder
-
         self.sst_field_names = SST_FIELD_NAMES
         self.climatology_field_names = CLIMATOLOGY_FIELD_NAMES
 

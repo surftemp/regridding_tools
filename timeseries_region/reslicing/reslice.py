@@ -32,8 +32,7 @@ compressor=Zstd(level=1)
 import cf
 import numpy as np
 
-DEFAULT_SST_CCI_ANALYSIS_L4_PATH = "/neodc/esacci/sst/data/CDR_v2/Analysis/L4/v2.1"
-DEFAULT_C3S_SST_ANALYSIS_L4_PATH = "/neodc/c3s_sst/data/ICDR_v2/Analysis/L4/v2.0/"
+DEFAULT_SST_ANALYSIS_L4_PATH = "/neodc/c3s_sst/data/ICDR_v2/Analysis/L4/v2.0/"
 DEFAULT_SST_CCI_CLIMATOLOGY_PATH = "/neodc/esacci/sst/data/CDR_v2/Climatology/L4/v2.1/"
 
 DEFAULT_OUTPUT_FOLDER="/gws/nopw/j04/nceo_uor/niall/reslice"
@@ -56,12 +55,10 @@ class Reslicer(object):
     def parseTime(s):
         return datetime.datetime.strptime(s, "%Y%m%dT%H%M%SZ")
 
-    def __init__(self,input_cci_folder,input_c3s_folder,climatology_folder,output_resolution,cdr_version):
-        self.input_cci_folder = input_cci_folder
-        self.input_c3s_folder = input_c3s_folder
+    def __init__(self,input_sst_folder,climatology_folder,output_resolution):
+        self.input_sst_folder = input_sst_folder
         self.climatology_folder = climatology_folder
         self.output_resolution = output_resolution
-        self.cdr_version = cdr_version
 
     def reslice(self,output_parent_folder,year):
 
@@ -103,13 +100,10 @@ class Reslicer(object):
                 self.reportProgress(day,days,"reslice_days IN")
 
                 if year == "climatology":
-                    in_path = os.path.join(self.climatology_folder,"D%03d-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR2.1-v02.0-fv01.0.nc"%(1+day+chunk_day))
-                elif year < 2017:
-                    in_path = os.path.join(self.input_cci_folder,str(year),"%02d"%(dt.month),"%02d"%(dt.day),
-                        "%s-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR%s-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000"),self.cdr_version))
+                    in_path = os.path.join(self.climatology_folder,"D%03d-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR3.0-v02.0-fv01.0.nc"%(1+day+chunk_day))
                 else:
-                    in_path = os.path.join(self.input_c3s_folder,str(year),"%02d"%(dt.month),"%02d"%(dt.day),
-                                               "%s-C3S-L4_GHRSST-SSTdepth-OSTIA-GLOB_ICDR%s-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000"),self.cdr_version))
+                    in_path = os.path.join(self.input_sst_folder,str(year),"%02d"%(dt.month),"%02d"%(dt.day),
+                        "%s-C3S-L4_GHRSST-SSTdepth-OSTIA-GLOB_ICDR3.0-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000")))
 
                 if not os.path.exists(in_path):
                     msg = "could not locate input file %s"%(in_path)
@@ -119,7 +113,7 @@ class Reslicer(object):
                     break
 
                 logger.debug("reading %s"%(in_path))
-                in_fields = cf.read(in_path)
+                in_fields = cf.read(in_path,extra='field_ancillary')
 
                 arrs = []
                 for field_idx in range(len(field_names)):
@@ -165,19 +159,11 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--input-cci', action='store',
-                        dest='input_cci',
+    parser.add_argument('--input-sst', action='store',
+                        dest='input_sst',
                         type=str,
-                        help='Specify the location of input CCI files',
-                        default=DEFAULT_SST_CCI_ANALYSIS_L4_PATH)
-
-    parser.add_argument('--input-c3s', action='store',
-                        dest='input_c3s',
-                        type=str,
-                        help='Specify the location of input C3S files',
-                        default=DEFAULT_C3S_SST_ANALYSIS_L4_PATH)
-
-    parser.add_argument('--cdr-version', type=str, help="set the CDR version (2.0, 2.1 etc)", default="2.1")
+                        help='Specify the location of input SST files',
+                        default=DEFAULT_SST_ANALYSIS_L4_PATH)
 
     parser.add_argument('--input-climatology', action='store',
                         dest='climatology_folder',
@@ -188,7 +174,7 @@ if __name__ == '__main__':
     parser.add_argument('--year', action='store',
                         dest='year',
                         type=str,
-                        help='Specify the year for reslicing SST data',
+                        help='Specify the year for reslicing SST data, or climatology',
                         metavar="YEAR",
                         default="2018")
 
@@ -212,7 +198,7 @@ if __name__ == '__main__':
     if args.verbose:
         logger.setLevel(DEBUG)
 
-    reslicer = Reslicer(args.input_cci, args.input_c3s, args.climatology_folder, args.output_resolution, args.cdr_version)
+    reslicer = Reslicer(args.input_sst, args.climatology_folder, args.output_resolution)
 
     if not args.year:
         logger.warning("Please specify --year <YEAR> or --year climatology.")

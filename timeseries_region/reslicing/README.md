@@ -26,7 +26,7 @@ Run reslice.py configured for the file layout of the regridding VM using `./resl
 
 ## Options
 
-Use the `--input-cci`, `--input-c3s` and `--input-climatology` to specify the locations of the various input file datasets
+Use the `--input-sst` and `--input-climatology` to specify the locations of the various input file datasets
 
 The defaults for these options should match the locations on CEDA/JASMIN under `/neodc`
 
