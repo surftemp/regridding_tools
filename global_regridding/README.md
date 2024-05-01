@@ -18,17 +18,17 @@ fraction of sea ice above which to exclude a cell from the calculation can be sp
 climatology this was assumed to be 1.0 and this cannot be changed. The regridded uncertainties are also calculated and
 parameters specifying the spatial (lambda) and temporal (tau) scales on which the uncertainties are assumed to be fully
 calculated can be specified. By default these are 3 degrees and 7 days respectively. Convenience fields for the year,
-mmonth, day and day of year are also output. The paths to the top level directories for the input data and climatology
+month, day and day of year are also output. The paths to the top level directories for the input data and climatology
 can be specified. These are assumed to be ordered by levels of subdirectories for year, month and day. The directory in
 which to save the output files can be specified and the output files can optionally be zipped into a single file with a
-user specifed name.
+user specified name.
 
 ```
 usage: makegriddedSSTs.py [-h] [--year YEAR] [--start_month START_MONTH] [--start_day START_DAY] [--end_month END_MONTH]
                           [--end_day END_DAY] [--anomalies] [--no_sea_ice_fraction] [--f_max F_MAX] [--tau TAU]
-                          [--spatial_lambda SPATIAL_LAMBDA] [--sst_cci_analysis_l4_path SST_CCI_ANALYSIS_L4_PATH]
-                          [--c3s_sst_analysis_l4_path C3S_SST_ANALYSIS_L4_PATH]
-                          [--sst_cci_climatology_path SST_CCI_CLIMATOLOGY_PATH] [--out_path OUT_PATH]
+                          [--spatial_lambda SPATIAL_LAMBDA] 
+                          [--sst_analysis_l4_path SST_ANALYSIS_L4_PATH]
+                          [--sst_climatology_path SST_CLIMATOLOGY_PATH] [--out_path OUT_PATH]
                           [--zip_name ZIP_NAME]
                           lon_resolution lat_resolution time_resolution
 
@@ -62,24 +62,22 @@ optional arguments:
   --spatial_lambda SPATIAL_LAMBDA
                         Spatial scale within which errors are assumed to be fully correlated in degrees. Default is 3.0
                         degrees.
-  --sst_cci_analysis_l4_path SST_CCI_ANALYSIS_L4_PATH
-                        Path to the SST CCI Analysis Level 4 input data.
-  --c3s_sst_analysis_l4_path C3S_SST_ANALYSIS_L4_PATH
-                        Path to the C3S SST Analysis Level 4 input data.
-  --sst_cci_climatology_path SST_CCI_CLIMATOLOGY_PATH
-                        Path to the SST CCI Climatology input data.
+  --sst_analysis_l4_path SST_ANALYSIS_L4_PATH
+                        Path to the SST Analysis Level 4 input data.
+  --sst_climatology_path SST_CLIMATOLOGY_PATH
+                        Path to the SST Climatology input data.
   --out_path OUT_PATH   The path in which to write the output file of regridded data.
   --zip_name ZIP_NAME   Combine all output files into a single zip file with this name.
 ```
 
 ### Example
 
-Regrid SST CCI files for 1982 to 0.25 x 0.25 degree spatial resolution and monthly temporal resolution with custom
+Regrid SST files for 1982 to 0.25 x 0.25 degree spatial resolution and monthly temporal resolution with custom
 paths.
 
 ```
 python makegriddedSSTs.py 0.25 0.25 monthly --year 1982 --start_month 1 --start_day 1 --end_month 12 --end_day 31
-    --sst_cci_analysis_l4_path /path/to/sst_cci/files --sst_cci_climatology_path /path/to/climatology/files
+    --sst_analysis_l4_path /path/to/sst/files --sst_climatology_path /path/to/climatology/files
     --out_path /path/to/output/files
 ```
 
