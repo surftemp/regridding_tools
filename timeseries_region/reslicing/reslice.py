@@ -60,6 +60,20 @@ class Reslicer(object):
         self.climatology_folder = climatology_folder
         self.output_resolution = output_resolution
 
+    def locate_file(self, in_dir):
+        """Locate a netcdf file in the specified directory and return its filename
+
+        :param in_dir:
+            The path to the directory to search
+
+        Raises an exception if less or more than one netcdf file exists in the directory
+        """
+        files = os.listdir(in_dir)
+        ncfiles = list(filter(lambda f: f.endswith(".nc"), files))
+        if len(ncfiles) != 1:
+            raise Exception(f"Directory {in_dir} does not contain exactly one netcdf4 file")
+        return os.path.join(in_dir, ncfiles[0])
+
     def reslice(self,output_parent_folder,year):
 
         days = 365 if year == "climatology" else self.getDaysInYear(year)
@@ -102,8 +116,7 @@ class Reslicer(object):
                 if year == "climatology":
                     in_path = os.path.join(self.climatology_folder,"D%03d-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR3.0-v02.0-fv01.0.nc"%(1+day+chunk_day))
                 else:
-                    in_path = os.path.join(self.input_sst_folder,str(year),"%02d"%(dt.month),"%02d"%(dt.day),
-                        "%s-C3S-L4_GHRSST-SSTdepth-OSTIA-GLOB_ICDR3.0-v02.0-fv01.0.nc"%(dt.strftime("%Y%m%d120000")))
+                    in_path = self.locate_file(os.path.join(self.input_sst_folder,str(year),"%02d"%(dt.month),"%02d"%(dt.day)))
 
                 if not os.path.exists(in_path):
                     msg = "could not locate input file %s"%(in_path)
