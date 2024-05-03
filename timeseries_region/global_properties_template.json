@@ -23,5 +23,5 @@
   "creator_name": "ESA SST CCI",
   "id": "OSTIA-ESACCI-L4-GLOB_CDR-v3.0",
   "platform": "ERS-<1,2>, Envisat, Sentinel-3<A,B>, NOAA-<06,07,08,09,10,11,12,14,15,16,17,18,19>, MetOp<A,B>, Aqua, GCOM-W",
-  "keywords": "Oceans > Ocean Temperature > Sea Surface Temperature",
+  "keywords": "Oceans > Ocean Temperature > Sea Surface Temperature"
 }
