@@ -97,9 +97,6 @@ class Reslicer(object):
         premature_end_of_data = False
         days_processed = 0
 
-        if year == 1981:
-            day = 243 # only data from september 1st
-
         while day < days:
             chunk_day = 0
             chunk_data = []
