@@ -66,12 +66,14 @@ class Reslicer(object):
         :param in_dir:
             The path to the directory to search
 
-        Raises an exception if less or more than one netcdf file exists in the directory
+        returns None if in_dir is not a directory or if less or more than one netcdf file exists in the directory
         """
+        if not os.path.isdir(in_dir):
+            return None
         files = os.listdir(in_dir)
         ncfiles = list(filter(lambda f: f.endswith(".nc"), files))
         if len(ncfiles) != 1:
-            raise Exception(f"Directory {in_dir} does not contain exactly one netcdf4 file")
+            return None
         return os.path.join(in_dir, ncfiles[0])
 
     def reslice(self,output_parent_folder,year):
@@ -115,7 +117,7 @@ class Reslicer(object):
                 else:
                     in_path = self.locate_file(os.path.join(self.input_sst_folder,str(year),"%02d"%(dt.month),"%02d"%(dt.day)))
 
-                if not os.path.exists(in_path):
+                if in_path is None or not os.path.exists(in_path):
                     msg = "could not locate input file %s"%(in_path)
                     logger.warning(msg)
                     # NOTE - not a problem if the data does not exist for the year
