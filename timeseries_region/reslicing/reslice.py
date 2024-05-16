@@ -113,7 +113,7 @@ class Reslicer(object):
                 self.reportProgress(day,days,"reslice_days IN")
 
                 if year == "climatology":
-                    in_path = os.path.join(self.climatology_folder,"D%03d-ESACCI-L4_GHRSST-SSTdepth-OSTIA-GLOB_CDR3.0-v02.0-fv01.0.nc"%(1+day+chunk_day))
+                    in_path = os.path.join(self.climatology_folder,"D%03d-ESACCI-L4_GHRSST-SSTdepth-Climatology-GLOB_CDR3.0-v02.0-fv01.0.nc"%(1+day+chunk_day))
                 else:
                     in_path = self.locate_file(os.path.join(self.input_sst_folder,str(year),"%02d"%(dt.month),"%02d"%(dt.day)))
 
